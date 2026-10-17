@@ -1,0 +1,30 @@
+﻿<Project>
+
+  <!--
+    DigitalMIDP is a Windows-only desktop application.
+
+    It is a WPF app that drives Autodesk Desktop Connector through the Windows registry and the
+    local file system, and protects its OAuth refresh token with Windows DPAPI. None of that has a
+    cross-platform equivalent, so the whole solution targets Windows exclusively rather than
+    pretending to be portable:
+
+      * every project carries a Windows target platform (see TargetFramework in each .csproj),
+        which makes the platform-compatibility analyser (CA1416) check Windows-only API use at
+        build time instead of letting it fail at runtime on another OS;
+      * RuntimeIdentifiers below restricts publishing to Windows runtimes.
+
+    Domain and Application stay free of Windows *APIs* - that is a layering rule, enforced by the
+    ProjectReference graph and reviewed by hand - but they are still only ever built and shipped as
+    part of this Windows application.
+  -->
+  <PropertyGroup>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+
+    <!-- Treat the Windows platform-compatibility analyser's findings as real problems: a
+         Windows-only call reached from code that is not marked Windows-only is a bug here, not a
+         style preference. -->
+    <AnalysisLevel>latest</AnalysisLevel>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+  </PropertyGroup>
+
+</Project>

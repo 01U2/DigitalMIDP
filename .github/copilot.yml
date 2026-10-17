@@ -1,0 +1,79 @@
+# GitHub Copilot configuration for DigitalMIDP
+# This file defines how Copilot should scope, prioritise, and respect project instructions.
+# It does NOT replace or restate the markdown instruction files.
+
+version: 1
+
+# Instruction sources (authoritative order)
+instructions:
+  - path: .github/Instructions/engineering-standards.instructions.md
+    priority: 1
+  - path: .github/Instructions/aps-csharp.instructions.md
+    priority: 2
+  - path: .github/Instructions/testing-standards.instructions.md
+    priority: 3
+  - path: .github/Instructions/documentation-standards.instructions.md
+    priority: 4
+  - path: %USERPROFILE%/OneDrive/02_Coding/00 Agents/c-Sharp/agents/c_orchestrator.agent.md
+    priority: 5
+
+# Explicit immutability rules
+immutability:
+  - .github/Instructions/engineering-standards.instructions.md
+  - .github/Instructions/aps-csharp.instructions.md
+  - ARCHITECTURE.md
+
+# Files Copilot is allowed and expected to update
+mutable:
+  - .github/Plans/**
+  - CHANGELOG.md
+  - .github/upgrades/**
+
+# Architectural guardrails
+architecture:
+  pattern: CleanArchitecture
+  layers:
+    - Domain
+    - Application
+    - Infrastructure
+    - UI
+  dependency_rule: inward-only
+
+# Language and framework constraints
+platform:
+  language: C#
+  dotnet:
+    version: "8.0"
+  ui:
+    framework: WPF
+    pattern: MVVM
+
+# Behavioural constraints for Copilot agents
+agent:
+  planning:
+    require_plan_for_multi_step_tasks: true
+  execution:
+    one_logical_change_per_response: true
+  safety:
+    confirm_before_breaking_changes: true
+    verify_files_exist_before_edit: true
+
+# Task discipline
+workflow:
+  task_tracking:
+    enabled: true
+    source_of_truth: .github/Plans/
+    update_on:
+      - task_completion
+      - task_discovery
+
+# Explicit exclusions
+exclude:
+  - bin/**
+  - obj/**
+  - .vs/**
+
+# Documentation intent
+notes:
+  - ARCHITECTURE.md is human rationale only
+  - Instruction files are authoritative and should only be changed by maintainers when policy updates are required

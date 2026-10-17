@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Deliberately NOT net8.0-windows, even though this project only ever ships inside a
+         Windows application (see Directory.Build.props). Keeping the platform-neutral target is
+         what makes the compatibility analyser flag any Windows-only API that creeps into the Application layer -
+         a layering violation this target framework is the cheapest guard against. -->
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>12.0</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Autodesk.DataManagement" Version="2.1.3" />
+    <PackageReference Include="Autodesk.SDKManager" Version="1.1.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DigitalMIDP.Domain\DigitalMIDP.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DigitalMIDP.Tests" />
+  </ItemGroup>
+
+</Project>

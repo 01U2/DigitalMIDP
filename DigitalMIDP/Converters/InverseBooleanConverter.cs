@@ -1,0 +1,31 @@
+using System.Globalization;
+using System.Windows.Data;
+
+namespace DigitalMIDP.Converters;
+
+/// <summary>
+/// Inverts a Boolean value.
+/// True -> False, False -> True.
+/// </summary>
+public sealed class InverseBooleanConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is bool boolValue)
+        {
+            return !boolValue;
+        }
+
+        return true;
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is bool boolValue)
+        {
+            return !boolValue;
+        }
+
+        return false;
+    }
+}

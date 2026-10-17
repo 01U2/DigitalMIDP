@@ -1,0 +1,50 @@
+﻿name: Bug Report
+description: Report a problem with the application
+title: "[Bug]: "
+labels: bug
+assignees : 01U2
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        We appreciate your time to file this bug report!
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the problem.
+      placeholder: The application crashes when...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to...
+        2. Click...
+        3. Observe...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - Low
+        - Medium
+        - High
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmation
+      options:
+        - label: I searched for existing issues
+          required: true

@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "DigitalMIDP": {
+      "commandName": "Project",
+      "nativeDebugging": true
+    }
+  }
+}

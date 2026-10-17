@@ -1,0 +1,11 @@
+{
+  "$schema": "https://xunit.net/schema/current/xunit.runner.schema.json",
+  "trait": {
+    "skip": [
+      {
+        "name": "Status",
+        "value": "Placeholder"
+      }
+    ]
+  }
+}

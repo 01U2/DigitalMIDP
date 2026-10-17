@@ -1,0 +1,53 @@
+﻿name: Feature Request
+description: Propose a new feature or improvement
+title: "[Feature]: "
+labels: feature
+assignees : 01U2
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement!
+
+  - type: textarea
+    id: current-state
+    attributes:
+      label: Current State
+      description: Describe the current user experience and limitations.
+      placeholder: |
+        A user may not be able to detect if their project is currently synced.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-outcome
+    attributes:
+      label: Expected Outcome
+      description: Describe the desired behavior.
+      placeholder: |
+        Application indicates that the currently selected project is available locally.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Solution
+      description: How would you solve the problem?
+      placeholder: |
+        Display a synced icon next to the project name.
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Mockups, screenshots, related issues, etc.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmation
+      options:
+        - label: I searched for existing feature requests
+          required: true

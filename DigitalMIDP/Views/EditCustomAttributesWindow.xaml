@@ -1,0 +1,82 @@
+﻿<Window x:Class="DigitalMIDP.Views.EditCustomAttributesWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:converters="clr-namespace:DigitalMIDP.Converters"
+        mc:Ignorable="d"
+        Title="Edit Custom Attributes"
+        Height="500" Width="480"
+         Icon="/DigitalMIDP;component/Assets/Icons/icon.ico"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResizeWithGrip"
+        Background="#F0F0F0">
+
+    <Window.Resources>
+        <converters:BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <converters:InverseBooleanConverter x:Key="InverseBool"/>
+        <converters:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVis"/>
+        <converters:NullToVisibilityConverter x:Key="NullToVis"/>
+    </Window.Resources>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,15">
+            <TextBlock Text="{Binding FileName, StringFormat='Custom Attributes — {0}'}"
+                       FontSize="16" FontWeight="Bold" Foreground="#2C3E50" TextWrapping="Wrap"/>
+            <TextBlock Text="Leave a field blank to keep each file's existing value. Only fields you edit will be changed."
+                       FontSize="11" Foreground="#7F8C8D" Margin="0,4,0,0" TextWrapping="Wrap"
+                       Visibility="{Binding IsMultiFile, Converter={StaticResource BoolToVis}}"/>
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding Fields}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Margin="0,0,0,15">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold" Foreground="#2C3E50"/>
+                                <TextBlock Text=" *" FontWeight="SemiBold" Foreground="#E74C3C"
+                                           Visibility="{Binding Optional, Converter={StaticResource InverseBoolToVis}}"/>
+                            </StackPanel>
+                            <TextBlock Text="{Binding Description}" FontSize="11" Foreground="#7F8C8D" Margin="0,2,0,4"
+                                       TextWrapping="Wrap"
+                                       Visibility="{Binding Description, Converter={StaticResource NullToVis}}"/>
+
+                            <ComboBox ItemsSource="{Binding Options}" DisplayMemberPath="Value"
+                                      SelectedValue="{Binding Value, Mode=TwoWay}" SelectedValuePath="Value"
+                                      IsEditable="False" Padding="6,4"
+                                      Visibility="{Binding IsDropdown, Converter={StaticResource BoolToVis}}"/>
+
+                            <TextBox Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     Padding="6,4"
+                                     Visibility="{Binding IsDropdown, Converter={StaticResource InverseBoolToVis}}"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <Border Grid.Row="2" Background="#FADBD8" Padding="10" CornerRadius="4" Margin="0,10,0,0"
+                Visibility="{Binding ErrorMessage, Converter={StaticResource NullToVis}}">
+            <TextBlock Text="{Binding ErrorMessage}" Foreground="#E74C3C" FontSize="12" TextWrapping="Wrap"/>
+        </Border>
+
+        <Border Grid.Row="2" Background="#D5F5E3" Padding="10" CornerRadius="4" Margin="0,10,0,0"
+                Visibility="{Binding SuccessMessage, Converter={StaticResource NullToVis}}">
+            <TextBlock Text="{Binding SuccessMessage}" Foreground="#27AE60" FontSize="12" TextWrapping="Wrap"/>
+        </Border>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
+            <Button Content="Cancel" Padding="15,8" Margin="0,0,10,0" Click="CancelButton_Click"/>
+            <Button Content="Save" Padding="15,8" Background="#3498DB" Foreground="White" BorderThickness="0"
+                    Command="{Binding SaveCommand}" IsEnabled="{Binding IsSaving, Converter={StaticResource InverseBool}}"/>
+        </StackPanel>
+    </Grid>
+</Window>

@@ -1,0 +1,55 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Windows-only by design: a WPF application that integrates with Autodesk Desktop
+         Connector. See Directory.Build.props for the solution-wide rationale. -->
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>12.0</LangVersion>
+    <StartupObject>DigitalMIDP.App</StartupObject>
+    <ApplicationIcon>Assets\Icons\icon.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Lets DigitalMIDP.Tests build the real DI container via App.ConfigureServices and verify that
+         every registration resolves, instead of that only being discovered at launch. -->
+    <InternalsVisibleTo Include="DigitalMIDP.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DigitalMIDP.Infrastructure\DigitalMIDP.Infrastructure.csproj" />
+    <ProjectReference Include="..\DigitalMIDP.Application\DigitalMIDP.Application.csproj" />
+    <ProjectReference Include="..\DigitalMIDP.Domain\DigitalMIDP.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Autodesk.DataManagement" Version="2.1.3" />
+    <PackageReference Include="Autodesk.SDKManager" Version="1.1.2" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\Icons\icon.ico" />
+    <Resource Include="Assets\Icons\icon.png" />
+    <None Include="Assets\Icons\icon.svg" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="UI\" />
+  </ItemGroup>
+
+</Project>
