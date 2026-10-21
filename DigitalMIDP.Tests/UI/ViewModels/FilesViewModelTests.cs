@@ -50,6 +50,7 @@ public sealed class FilesViewModelTests
     private FilesViewModel CreateViewModel() => new(
         _fileListingUseCase,
         _dataManagementService,
+        TokenProvider(),
         _openFileLocallyUseCase,
         _openFileLocationUseCase,
         _getLocalFilePathUseCase,
@@ -603,7 +604,6 @@ public sealed class FilesViewModelTests
 
         viewModel.CurrentHubId = "hub1";
         viewModel.CurrentProjectId = "b.project1";
-        viewModel.CurrentAccessToken = "token";
         viewModel.Items = new ObservableCollection<ItemDto>
         {
             new() { Id = "f1", Name = "File1.rvt", Type = ItemType.File }
@@ -622,7 +622,6 @@ public sealed class FilesViewModelTests
         viewModel.Items.Should().BeEmpty();
         viewModel.AvailableMetadataFields.Should().BeEmpty();
         viewModel.CurrentProjectId.Should().BeNull();
-        viewModel.CurrentAccessToken.Should().BeNull();
         viewModel.CurrentHubId.Should().BeNull();
     }
 
@@ -695,7 +694,6 @@ public sealed class FilesViewModelTests
         var viewModel = CreateViewModel();
         viewModel.CurrentHubId = "hub1";
         viewModel.CurrentProjectId = "b.project1";
-        viewModel.CurrentAccessToken = "token";
         viewModel.Items = new ObservableCollection<ItemDto>
         {
             new() { Id = "existing", Name = "Existing.rvt", Type = ItemType.File, ItemUrn = "urn:existing" }
@@ -844,7 +842,6 @@ public sealed class FilesViewModelTests
         var viewModel = CreateViewModel();
         viewModel.CurrentHubId = "hub1";
         viewModel.CurrentProjectId = "b.project1";
-        viewModel.CurrentAccessToken = "token";
 
         _dataManagementService
             .GetRootFolderAsync("hub1", "b.project1", "token", Arg.Any<CancellationToken>())
@@ -859,9 +856,82 @@ public sealed class FilesViewModelTests
         _cdeStructureUseCase.Received(1).Invalidate("b.project1");
     }
 
+    [Fact]
+    public async Task LoadFolderItemsAsync_UsesTheTokenFromTheTokenProvider()
+    {
+        var viewModel = CreateViewModel();
+        viewModel.CurrentHubId = "hub1";
+        viewModel.CurrentProjectId = "b.project1";
+        _dataManagementService
+            .GetRootFolderAsync("hub1", "b.project1", Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new FolderDto { Id = "root", Name = "Project Files" });
+
+        await viewModel.LoadFolderItemsAsync();
+
+        // The ViewModel holds no token of its own; the one passed down is whatever the provider
+        // returned for this call.
+        await _dataManagementService.Received(1).GetRootFolderAsync(
+            "hub1", "b.project1", "token", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public void AutoRefreshTick_WhilePaused_IssuesNoApsRequests()
+    {
+        var viewModel = CreateViewModel();
+        viewModel.CurrentHubId = "hub1";
+        viewModel.CurrentProjectId = "b.project1";
+
+        viewModel.SetAutoRefreshPaused(true);
+        InvokeAutoRefreshTick(viewModel);
+
+        _dataManagementService.DidNotReceive().GetRootFolderAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public void SetAutoRefreshPaused_ResumingAfterASkippedTick_RefreshesOnce()
+    {
+        var viewModel = CreateViewModel();
+        viewModel.CurrentHubId = "hub1";
+        viewModel.CurrentProjectId = "b.project1";
+        _dataManagementService
+            .GetRootFolderAsync("hub1", "b.project1", Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new FolderDto { Id = "root", Name = "Project Files" });
+
+        viewModel.SetAutoRefreshPaused(true);
+        InvokeAutoRefreshTick(viewModel);
+        InvokeAutoRefreshTick(viewModel);
+        viewModel.SetAutoRefreshPaused(false);
+
+        // Two skipped ticks still mean one catch-up load, not two.
+        _dataManagementService.Received(1).GetRootFolderAsync(
+            "hub1", "b.project1", Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public void SetAutoRefreshPaused_ResumingWithNoSkippedTick_DoesNotRefresh()
+    {
+        var viewModel = CreateViewModel();
+        viewModel.CurrentHubId = "hub1";
+        viewModel.CurrentProjectId = "b.project1";
+
+        viewModel.SetAutoRefreshPaused(true);
+        viewModel.SetAutoRefreshPaused(false);
+
+        _dataManagementService.DidNotReceive().GetRootFolderAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
     #endregion
 
     #region Test helpers
+
+    private static DigitalMIDP.Application.Interfaces.ITokenProvider TokenProvider()
+    {
+        var provider = Substitute.For<DigitalMIDP.Application.Interfaces.ITokenProvider>();
+        provider.GetAccessTokenAsync(Arg.Any<CancellationToken>()).Returns("token");
+        return provider;
+    }
 
     private static System.Windows.Threading.DispatcherTimer AutoRefreshTimer(FilesViewModel viewModel) =>
         Field<System.Windows.Threading.DispatcherTimer>(viewModel, "_autoRefreshTimer");
@@ -876,6 +946,12 @@ public sealed class FilesViewModelTests
     /// </summary>
     private static void StartAutoRefreshTimer(FilesViewModel viewModel) =>
         AutoRefreshTimer(viewModel).Start();
+
+    /// <summary>Raises one auto-refresh tick without waiting out the five-minute interval.</summary>
+    private static void InvokeAutoRefreshTick(FilesViewModel viewModel) =>
+        typeof(FilesViewModel)
+            .GetMethod("AutoRefreshTimerTick", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .Invoke(viewModel, [null, EventArgs.Empty]);
 
     /// <summary>
     /// Sets IsLoading, whose setter is private (the property is driven by LoadFolderItemsAsync).

@@ -105,7 +105,22 @@ internal sealed partial class DataManagementService : IDataManagementService
     /// Retrieves all hubs accessible to the authenticated user.
     /// GET /project/v1/hubs
     /// </summary>
-    public async Task<IEnumerable<HubDto>> GetHubsAsync(string accessToken, CancellationToken cancellationToken)
+    public Task<IEnumerable<HubDto>> GetHubsAsync(string accessToken, CancellationToken cancellationToken)
+    {
+        // The hub list was re-fetched (every page) on each sign-in, and the project list on every
+        // hub selection - including flipping back to a hub already looked at. Neither changes within
+        // a session in any way the user is waiting on. Not project-scoped (projectId null), so a
+        // project Refresh leaves them alone; sign-out clears the whole cache, so a second user never
+        // sees the first user's hubs.
+        return _cache.GetOrAddAsync(
+            null,
+            "hubs",
+            SchemaCacheLifetime,
+            ct => FetchHubsAsync(ct),
+            cancellationToken);
+    }
+
+    private async Task<IEnumerable<HubDto>> FetchHubsAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("Fetching hubs from APS");
 
@@ -183,12 +198,26 @@ internal sealed partial class DataManagementService : IDataManagementService
     /// Retrieves all projects within a specific hub.
     /// GET /project/v1/hubs/{hubId}/projects
     /// </summary>
-    public async Task<IEnumerable<ProjectDto>> GetProjectsAsync(
+    public Task<IEnumerable<ProjectDto>> GetProjectsAsync(
         string hubId,
         string accessToken,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(hubId);
+
+        // See GetHubsAsync for why this is cached and how it is cleared.
+        return _cache.GetOrAddAsync(
+            null,
+            $"projects:{hubId}",
+            SchemaCacheLifetime,
+            ct => FetchProjectsAsync(hubId, ct),
+            cancellationToken);
+    }
+
+    private async Task<IEnumerable<ProjectDto>> FetchProjectsAsync(
+        string hubId,
+        CancellationToken cancellationToken)
+    {
         _logger.LogInformation("Fetching projects for hub {HubId}", hubId);
 
         try
