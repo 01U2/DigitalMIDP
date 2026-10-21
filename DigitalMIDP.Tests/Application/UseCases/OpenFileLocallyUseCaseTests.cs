@@ -282,9 +282,9 @@ public class OpenFileLocallyUseCaseTests
         _mockLogger.Received().Log(
             LogLevel.Information,
             Arg.Any<EventId>(),
-            Arg.Is<object>(s => s.ToString().Contains("OpenFileLocallyUseCase: Starting")),
+            Arg.Is<object>(s => s.ToString()!.Contains("OpenFileLocallyUseCase: Starting")),
             Arg.Any<Exception>(),
-            Arg.Any<Func<object, Exception, string>>());
+            Arg.Any<Func<object, Exception?, string>>());
     }
 
     [Fact]
@@ -314,9 +314,9 @@ public class OpenFileLocallyUseCaseTests
         _mockLogger.Received().Log(
             LogLevel.Information,
             Arg.Any<EventId>(),
-            Arg.Is<object>(s => s.ToString().Contains("File opened successfully")),
+            Arg.Is<object>(s => s.ToString()!.Contains("File opened successfully")),
             Arg.Any<Exception>(),
-            Arg.Any<Func<object, Exception, string>>());
+            Arg.Any<Func<object, Exception?, string>>());
     }
 
     [Fact]
@@ -346,9 +346,9 @@ public class OpenFileLocallyUseCaseTests
         _mockLogger.Received().Log(
             LogLevel.Information,
             Arg.Any<EventId>(),
-            Arg.Is<object>(s => s.ToString().Contains("Local file open failed")),
+            Arg.Is<object>(s => s.ToString()!.Contains("Local file open failed")),
             Arg.Any<Exception>(),
-            Arg.Any<Func<object, Exception, string>>());
+            Arg.Any<Func<object, Exception?, string>>());
     }
 
     #endregion

@@ -994,10 +994,11 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
                     "Local file open failed: {ErrorMessage}",
                     result.ErrorMessage);
                 
-                ErrorMessage = result.ErrorMessage ?? "Unable to open file locally.";
-                
+                var message = result.ErrorMessage ?? "Unable to open file locally.";
+                ErrorMessage = message;
+
                 // Show error dialog to user
-                ShowFileOpenErrorDialog(result.ErrorMessage, SelectedItem.WebViewLink);
+                ShowFileOpenErrorDialog(message, SelectedItem.WebViewLink);
             }
         }
         catch (Exception ex)
@@ -1053,8 +1054,9 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
                     "Open file location failed: {ErrorMessage}",
                     result.ErrorMessage);
 
-                ErrorMessage = result.ErrorMessage ?? "Unable to open file location.";
-                ShowFileOpenErrorDialog(result.ErrorMessage, SelectedItem.WebViewLink);
+                var message = result.ErrorMessage ?? "Unable to open file location.";
+                ErrorMessage = message;
+                ShowFileOpenErrorDialog(message, SelectedItem.WebViewLink);
             }
         }
         catch (Exception ex)

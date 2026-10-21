@@ -83,9 +83,9 @@ public class GetDesktopConnectorStatusUseCaseTests
         _mockLogger.Received().Log(
             LogLevel.Information,
             Arg.Any<EventId>(),
-            Arg.Is<object>(s => s.ToString().Contains("installed")),
+            Arg.Is<object>(s => s.ToString()!.Contains("installed")),
             Arg.Any<Exception>(),
-            Arg.Any<Func<object, Exception, string>>());
+            Arg.Any<Func<object, Exception?, string>>());
     }
 
     #endregion
@@ -132,9 +132,9 @@ public class GetDesktopConnectorStatusUseCaseTests
         _mockLogger.Received().Log(
             LogLevel.Information,
             Arg.Any<EventId>(),
-            Arg.Is<object>(s => s.ToString().Contains("not installed")),
+            Arg.Is<object>(s => s.ToString()!.Contains("not installed")),
             Arg.Any<Exception>(),
-            Arg.Any<Func<object, Exception, string>>());
+            Arg.Any<Func<object, Exception?, string>>());
     }
 
     #endregion
@@ -169,9 +169,9 @@ public class GetDesktopConnectorStatusUseCaseTests
         _mockLogger.Received().Log(
             LogLevel.Warning,
             Arg.Any<EventId>(),
-            Arg.Is<object>(s => s.ToString().Contains("null")),
+            Arg.Is<object>(s => s.ToString()!.Contains("null")),
             Arg.Any<Exception>(),
-            Arg.Any<Func<object, Exception, string>>());
+            Arg.Any<Func<object, Exception?, string>>());
     }
 
     #endregion
@@ -204,9 +204,9 @@ public class GetDesktopConnectorStatusUseCaseTests
         _mockLogger.Received().Log(
             LogLevel.Error,
             Arg.Any<EventId>(),
-            Arg.Is<object>(s => s.ToString().Contains("Unexpected error")),
+            Arg.Is<object>(s => s.ToString()!.Contains("Unexpected error")),
             Arg.Any<Exception>(),
-            Arg.Any<Func<object, Exception, string>>());
+            Arg.Any<Func<object, Exception?, string>>());
     }
 
     [Fact]
@@ -241,9 +241,9 @@ public class GetDesktopConnectorStatusUseCaseTests
         _mockLogger.Received().Log(
             LogLevel.Information,
             Arg.Any<EventId>(),
-            Arg.Is<object>(s => s.ToString().Contains("GetDesktopConnectorStatusUseCase: Detecting")),
+            Arg.Is<object>(s => s.ToString()!.Contains("GetDesktopConnectorStatusUseCase: Detecting")),
             Arg.Any<Exception>(),
-            Arg.Any<Func<object, Exception, string>>());
+            Arg.Any<Func<object, Exception?, string>>());
     }
 
     #endregion

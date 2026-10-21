@@ -113,7 +113,7 @@ public sealed partial class AttributeFilterViewModel : ObservableObject
     public void RebuildOptions(
         IEnumerable<ItemDto> items,
         IReadOnlySet<string?> excludedValues,
-        IReadOnlyDictionary<string?, string?>? optionDescriptions = null,
+        IReadOnlyDictionary<string, string?>? optionDescriptions = null,
         IEnumerable<string?>? predefinedOptions = null)
     {
         foreach (var option in Options)
@@ -145,7 +145,7 @@ public sealed partial class AttributeFilterViewModel : ObservableObject
         foreach (var value in distinctValues)
         {
             // Look up description if available, otherwise null
-            var description = optionDescriptions?.GetValueOrDefault(value);
+            var description = value is null ? null : optionDescriptions?.GetValueOrDefault(value);
             var option = new FilterOptionViewModel(value, description, isChecked: !excludedValues.Contains(value));
             option.PropertyChanged += OnOptionPropertyChanged;
             Options.Add(option);
@@ -402,7 +402,7 @@ public sealed partial class FileFilterViewModel : ObservableObject
         OnPropertyChanged(nameof(StageFilter));
     }
 
-    private static (IReadOnlyDictionary<string?, string?>? Descriptions, IReadOnlyList<string?>? Values)
+    private static (IReadOnlyDictionary<string, string?>? Descriptions, IReadOnlyList<string?>? Values)
         GetOptionMetadata(MetadataFieldDisplayDto? field)
     {
         if (field is null)
@@ -426,7 +426,7 @@ public sealed partial class FileFilterViewModel : ObservableObject
         Func<ItemDto, string?> valueSelector,
         IReadOnlyList<ItemDto> items,
         Func<string, IReadOnlySet<string?>> excludedFor,
-        IReadOnlyDictionary<string?, string?>? optionDescriptions = null,
+        IReadOnlyDictionary<string, string?>? optionDescriptions = null,
         IEnumerable<string?>? predefinedOptions = null)
     {
         var filter = new AttributeFilterViewModel(key, displayName, valueSelector);

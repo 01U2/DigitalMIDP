@@ -102,11 +102,14 @@ internal static class MappingExtensions
     /// <summary>
     /// Maps Application Folder DTO to Domain Folder entity.
     /// </summary>
-    public static Folder ToEntity(this FolderDto folderDto)
+    public static Folder ToEntity(this FolderDto folderDto, string projectId)
     {
         ArgumentNullException.ThrowIfNull(folderDto);
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
 
-        return Folder.Create(folderDto.Id, folderDto.Name, folderDto.ParentFolderId);
+        // Previously passed ParentFolderId into the projectId slot (and dropped the parent). The
+        // project is supplied by the caller, as in the ItemDto overload below.
+        return Folder.Create(folderDto.Id, folderDto.Name, projectId, folderDto.ParentFolderId);
     }
 
     /// <summary>
