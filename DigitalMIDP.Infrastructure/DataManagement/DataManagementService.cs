@@ -471,7 +471,7 @@ internal sealed partial class DataManagementService : IDataManagementService
         // Deliberately keyed separately from GetNamingConventionAsync below. The two paths consume
         // overlapping sources but answer opposite questions (which attributes are NOT part of the
         // filename, versus which ones ARE), and sharing one cached result between them is exactly
-        // the kind of conflation CLAUDE.md warns against - the underlying per-endpoint caches are
+        // a conflation that would couple two unrelated features - the underlying per-endpoint caches are
         // where the shared work is actually reused.
         return _cache.GetOrAddAsync(
             projectId,
@@ -1214,7 +1214,7 @@ internal sealed partial class DataManagementService : IDataManagementService
             if (resultsElement.ValueKind != JsonValueKind.Array)
             {
                 // This endpoint family has returned several different envelope shapes over time (see
-                // the switch above and CLAUDE.md), so a shape nobody recognises is the one case
+                // the switch above), so a shape nobody recognises is the one case
                 // where the body earns its place in the log - truncated, and at Warning.
                 _logger.LogWarning(
                     "Custom attribute definitions response ({Context}) had no recognizable array (rootKind={RootKind}). Body: {Body}",
@@ -1270,7 +1270,7 @@ internal sealed partial class DataManagementService : IDataManagementService
                 // Additive only: reads a "required" key when "optional" itself is absent, same as the
                 // creation wizard's path. The fallback stays "optional" when neither is present -
                 // this list feeds the grid/Edit Attributes, a deliberately separate path from
-                // GetNamingConventionAsync (see CLAUDE.md), and its default direction is not changed.
+                // GetNamingConventionAsync, and its default direction is not changed.
                 Optional: ResolveOptionalFlag(d.Optional, d.Required) ?? true,
                 Options: d.ArrayValues?
                     .Select(v => new MetadataOptionDisplayDto(v, null))

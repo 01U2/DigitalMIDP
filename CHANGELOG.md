@@ -13,6 +13,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2026-10-21] - Build warnings and open-source readiness
+
+### Fixed
+- All build warnings (31 to 0), including a latent bug in `FolderDto.ToEntity` that passed the parent folder id as the project id.
+
+### Removed
+- Unused `Autodesk.DataManagement` and `Autodesk.SDKManager` packages from all projects. The Application layer now references `Microsoft.Extensions.Logging.Abstractions` directly instead of receiving it through those packages.
+
+### Changed
+- `SECURITY.md` describes what local logs contain and routes vulnerability reports through GitHub private vulnerability reporting.
+- Code comments no longer refer to a `CLAUDE.md` file that is not part of the repository.
+
+---
+
 ## [2026-10-19] - Pre-production review: logging, APS call reduction, tokens out of the UI
 
 ### Added

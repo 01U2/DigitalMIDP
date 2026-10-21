@@ -28,11 +28,13 @@ Security updates are provided for the following releases:
 
 ### 4. Logging & Redaction
 - HTTP handlers (`ApsResilienceHandler`, `ApsAuthorizationHandler`) and application loggers must never log:
-  - Bearer tokens
+  - Bearer, access or refresh tokens
   - Authorization headers
-  - Refresh tokens
+  - Authorization codes or PKCE verifiers
   - Client secrets
-  - Personal identifiable information (PII)
+  - Pre-signed S3 URL signatures
+- `FileLoggerProvider` masks credential-shaped values before they reach disk, as a last line of defence.
+- Diagnostic logs are kept only on the user's machine (`%LocalAppData%\DigitalMIDP\Logs`, 14-day retention). To support troubleshooting they record the Windows machine and user name at session start, plus project, folder and file identifiers and names. They leave the machine only if the user sends them.
 
 ### 5. Local File System & Desktop Connector Security
 - Desktop Connector path resolution (`GetLocalFilePathUseCase`) must validate and canonicalize paths before delegating to Windows shell execution.

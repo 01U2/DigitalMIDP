@@ -29,7 +29,7 @@ DigitalMIDP is a WPF desktop application that provides a digital files register,
 - WPF MVVM architecture
 - .NET 8 dependency injection
 - Desktop Connector integration
-- Youtbe video demo: [LINK](https://www.youtube.com/watch?v=Z8LgGaSiit0)
+- YouTube video demo: [LINK](https://www.youtube.com/watch?v=Z8LgGaSiit0)
 
 ## Quick Start
 
