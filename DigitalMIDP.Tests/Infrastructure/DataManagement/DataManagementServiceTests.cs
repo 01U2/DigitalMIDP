@@ -1108,6 +1108,63 @@ public sealed class DataManagementServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task GetHubsAndProjects_RepeatedCalls_AreServedFromTheCache()
+    {
+        var service = CreateService();
+        var requests = new List<string>();
+
+        _handlerMock.OnRequest = request =>
+        {
+            requests.Add(request.RequestUri!.AbsolutePath);
+            return CreateJsonResponse(new
+            {
+                data = new[] { new { id = "a.hub1", attributes = new { name = "Hub One", region = "US" } } },
+                links = (object?)null
+            });
+        };
+
+        await service.GetHubsAsync("token", CancellationToken.None);
+        await service.GetHubsAsync("token", CancellationToken.None);
+        await service.GetProjectsAsync("a.hub1", "token", CancellationToken.None);
+        await service.GetProjectsAsync("a.hub1", "token", CancellationToken.None);
+        await service.GetProjectsAsync("a.hub2", "token", CancellationToken.None);
+
+        // One request each for the hub list and for each distinct hub's project list - switching
+        // back to a hub already looked at no longer goes to APS again.
+        requests.Should().Equal(
+            "/project/v1/hubs",
+            "/project/v1/hubs/a.hub1/projects",
+            "/project/v1/hubs/a.hub2/projects");
+    }
+
+    [Fact]
+    public async Task GetHubsAsync_AfterAFailedFetch_AsksApsAgain()
+    {
+        var service = CreateService();
+        var calls = 0;
+
+        _handlerMock.OnRequest = _ =>
+        {
+            calls++;
+            return calls == 1
+                ? new HttpResponseMessage(System.Net.HttpStatusCode.Unauthorized)
+                : CreateJsonResponse(new
+                {
+                    data = new[] { new { id = "a.hub1", attributes = new { name = "Hub One", region = "US" } } },
+                    links = (object?)null
+                });
+        };
+
+        var first = () => service.GetHubsAsync("token", CancellationToken.None);
+        await first.Should().ThrowAsync<Exception>();
+
+        // A failure must not be cached for five minutes - the next attempt goes back to APS.
+        var hubs = await service.GetHubsAsync("token", CancellationToken.None);
+        hubs.Should().ContainSingle();
+        calls.Should().Be(2);
+    }
+
+    [Fact]
     public async Task GetHubsAsync_DropsHubsWithNoId()
     {
         var service = CreateService();

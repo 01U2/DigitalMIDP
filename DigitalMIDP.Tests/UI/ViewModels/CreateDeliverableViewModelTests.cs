@@ -21,7 +21,7 @@ public sealed class CreateDeliverableViewModelTests
 
     public CreateDeliverableViewModelTests()
     {
-        _viewModel = new CreateDeliverableViewModel(_structure, _dataManagement, _templates, _numbers,
+        _viewModel = new CreateDeliverableViewModel(_structure, _dataManagement, TokenProvider(), _templates, _numbers,
             Substitute.For<ILogger<CreateDeliverableViewModel>>());
     }
 
@@ -73,7 +73,7 @@ public sealed class CreateDeliverableViewModelTests
             .Returns(new DocumentNumberDto([new DocumentNumberSegmentDto(102, "Role", "AR"),
                 new DocumentNumberSegmentDto(103, "Number", "0001")], "-"));
 
-        await _viewModel.InitializeAsync("hub1", "b.project1", "token");
+        await _viewModel.InitializeAsync("hub1", "b.project1");
     }
 
     private async Task AdvanceToDetailsAsync()
@@ -177,5 +177,12 @@ public sealed class CreateDeliverableViewModelTests
 
         _viewModel.IsConfigured.Should().BeFalse();
         _viewModel.ErrorMessage.Should().Contain("related custom attributes");
+    }
+
+    private static DigitalMIDP.Application.Interfaces.ITokenProvider TokenProvider()
+    {
+        var provider = Substitute.For<DigitalMIDP.Application.Interfaces.ITokenProvider>();
+        provider.GetAccessTokenAsync(Arg.Any<CancellationToken>()).Returns("token");
+        return provider;
     }
 }

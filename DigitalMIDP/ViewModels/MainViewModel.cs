@@ -28,12 +28,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string? errorMessage;
 
-    [ObservableProperty]
-    private string? accessToken;
-
-    [ObservableProperty]
-    private string? refreshToken;
-
+    // No access/refresh token properties here on purpose: tokens live only in the DPAPI-protected
+    // token store and are attached to requests by ApsAuthorizationHandler. Only the expiry is kept,
+    // for display/diagnostics.
     [ObservableProperty]
     private DateTime? tokenExpiresAt;
 
@@ -120,8 +117,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
             var result = await _authenticationUseCase.ExecuteAsync(_cancellationTokenSource.Token);
 
-            AccessToken = result.AccessToken;
-            RefreshToken = result.RefreshToken;
             TokenExpiresAt = result.ExpiresAt;
             IsAuthenticated = true;
 
@@ -202,8 +197,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // and must not appear to fail: revocation is best-effort, and the local session is over
         // either way.
         IsAuthenticated = false;
-        AccessToken = null;
-        RefreshToken = null;
         TokenExpiresAt = null;
         ErrorMessage = null;
 
@@ -230,13 +223,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public async Task LoadHubsAsync()
     {
-        if (string.IsNullOrWhiteSpace(AccessToken))
+        if (!IsAuthenticated)
         {
-            _logger.LogWarning("Cannot load hubs: no access token");
+            _logger.LogWarning("Cannot load hubs: not signed in");
             return;
         }
 
-        await HubSelectionViewModel.LoadHubsAsync(AccessToken);
+        await HubSelectionViewModel.LoadHubsAsync();
     }
 
     /// <summary>
@@ -245,15 +238,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public async Task LoadProjectsAsync()
     {
-        if (string.IsNullOrWhiteSpace(AccessToken) || HubSelectionViewModel.SelectedHub == null)
+        if (!IsAuthenticated || HubSelectionViewModel.SelectedHub == null)
         {
-            _logger.LogWarning("Cannot load projects: no access token or hub selected");
+            _logger.LogWarning("Cannot load projects: not signed in or no hub selected");
             return;
         }
 
-        // Pass hub ID and access token to ProjectSelectionViewModel
         ProjectSelectionViewModel.CurrentHubId = HubSelectionViewModel.SelectedHub.Id;
-        ProjectSelectionViewModel.CurrentAccessToken = AccessToken;
 
         await ProjectSelectionViewModel.LoadProjectsAsync();
     }
@@ -284,7 +275,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     private void OnProjectSelected()
     {
-        if (ProjectSelectionViewModel.SelectedProject == null || string.IsNullOrWhiteSpace(AccessToken))
+        if (ProjectSelectionViewModel.SelectedProject == null || !IsAuthenticated)
         {
             return;
         }
@@ -297,7 +288,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         FilesViewModel.CurrentProjectId = ProjectSelectionViewModel.SelectedProject.Id;
         FilesViewModel.CurrentProjectName = ProjectSelectionViewModel.SelectedProject.Name;
         FilesViewModel.CurrentFolderId = null; // null = root folder
-        FilesViewModel.CurrentAccessToken = AccessToken;
 
         // The folder load fetches the project's metadata with its cancellation token; do not
         // launch a second independent schema request that can complete after a project switch.

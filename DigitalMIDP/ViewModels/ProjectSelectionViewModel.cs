@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DigitalMIDP.Application.Dtos;
+using DigitalMIDP.Application.Interfaces;
 using DigitalMIDP.Application.UseCases;
 using Microsoft.Extensions.Logging;
 
@@ -12,6 +13,7 @@ namespace DigitalMIDP.ViewModels;
 public sealed partial class ProjectSelectionViewModel : ObservableObject
 {
     private readonly IFileListingUseCase _fileListingUseCase;
+    private readonly ITokenProvider _tokenProvider;
     private readonly ILogger<ProjectSelectionViewModel> _logger;
 
     [ObservableProperty]
@@ -29,28 +31,28 @@ public sealed partial class ProjectSelectionViewModel : ObservableObject
     [ObservableProperty]
     private string? currentHubId;
 
-    [ObservableProperty]
-    private string? currentAccessToken;
-
     public ProjectSelectionViewModel(
         IFileListingUseCase fileListingUseCase,
+        ITokenProvider tokenProvider,
         ILogger<ProjectSelectionViewModel> logger)
     {
         ArgumentNullException.ThrowIfNull(fileListingUseCase);
+        ArgumentNullException.ThrowIfNull(tokenProvider);
         ArgumentNullException.ThrowIfNull(logger);
 
         _fileListingUseCase = fileListingUseCase;
+        _tokenProvider = tokenProvider;
         _logger = logger;
     }
 
     /// <summary>
     /// Loads projects for the selected hub.
-    /// Call this after setting CurrentHubId and CurrentAccessToken.
+    /// Call this after setting CurrentHubId.
     /// </summary>
     [RelayCommand]
     public async Task LoadProjectsAsync()
     {
-        if (string.IsNullOrWhiteSpace(CurrentHubId) || string.IsNullOrWhiteSpace(CurrentAccessToken))
+        if (string.IsNullOrWhiteSpace(CurrentHubId))
         {
             return;
         }
@@ -62,7 +64,9 @@ public sealed partial class ProjectSelectionViewModel : ObservableObject
         {
             _logger.LogInformation("Loading projects for hub {HubId}", CurrentHubId);
 
-            var response = await _fileListingUseCase.GetProjectsAsync(CurrentHubId!, CurrentAccessToken!, CancellationToken.None);
+            // Fetched per call, never stored on the ViewModel - see TokenExposureTests.
+            var accessToken = await _tokenProvider.GetAccessTokenAsync(CancellationToken.None);
+            var response = await _fileListingUseCase.GetProjectsAsync(CurrentHubId!, accessToken, CancellationToken.None);
             Projects = new List<ProjectDto>(response.Projects);
 
             _logger.LogInformation("Loaded {ProjectCount} projects", Projects.Count);

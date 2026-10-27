@@ -94,7 +94,7 @@ public sealed class FileFilterViewModelTests
             new() { Id = "item2", Name = "Test 2", Type = ItemType.File, CustomAttributes = new Dictionary<string, string?> { ["Status"] = "002" }.AsReadOnly() }
         };
 
-        var optionDescriptions = new Dictionary<string?, string?>
+        var optionDescriptions = new Dictionary<string, string?>
         {
             ["001"] = "In Progress",
             ["002"] = "Complete"
@@ -159,7 +159,7 @@ public sealed class FileFilterViewModelTests
             new() { Id = "item1", Name = "Test 1", Type = ItemType.File, CustomAttributes = new Dictionary<string, string?> { ["Status"] = "001" }.AsReadOnly() }
         };
 
-        var optionDescriptions = new Dictionary<string?, string?>
+        var optionDescriptions = new Dictionary<string, string?>
         {
             ["001"] = "In Progress"
         };

@@ -13,6 +13,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2026-10-21] - Build warnings and open-source readiness
+
+### Fixed
+- All build warnings (31 to 0), including a latent bug in `FolderDto.ToEntity` that passed the parent folder id as the project id.
+
+### Removed
+- Unused `Autodesk.DataManagement` and `Autodesk.SDKManager` packages from all projects. The Application layer now references `Microsoft.Extensions.Logging.Abstractions` directly instead of receiving it through those packages.
+
+### Changed
+- `SECURITY.md` describes what local logs contain and routes vulnerability reports through GitHub private vulnerability reporting.
+- Code comments no longer refer to a `CLAUDE.md` file that is not part of the repository.
+
+---
+
+## [2026-10-19] - Pre-production review: logging, APS call reduction, tokens out of the UI
+
+### Added
+- `FileLoggerProvider`: persistent daily log at `%LocalAppData%\DigitalMIDP\Logs\DigitalMIDP-yyyyMMdd.log` (14-day retention, credentials redacted). Level/retention overridable via `Logging:File:MinimumLevel` / `Logging:File:RetentionDays`.
+- Session-start log line with app version, OS, runtime, machine name, Windows user, culture, time zone and log path; fatal startup errors and application exit are now logged to file.
+
+### Changed
+- Auto-refresh is paused while the main window is minimised or the Windows session is locked, with a single catch-up refresh on resume.
+- Hub and project lists are cached for five minutes (cleared on sign-out) instead of being refetched on every sign-in and hub switch.
+
+### Security
+- ViewModels no longer hold OAuth tokens: the `AccessToken`/`RefreshToken`/`CurrentAccessToken` properties were removed. Where a use case still takes an access token, the ViewModel fetches a current one from `ITokenProvider` for that single call, and the deliverable batch request gets its token in `MainWindow` at the moment it runs. Application and Infrastructure signatures are unchanged.
+
+---
+
 ## [2026-10-15] - Company-specific Autodesk Client ID
 
 ### Added

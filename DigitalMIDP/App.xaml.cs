@@ -1,11 +1,14 @@
 ﻿using DigitalMIDP.Application.UseCases;
 using DigitalMIDP.Infrastructure;
+using DigitalMIDP.Infrastructure.Logging;
 using DigitalMIDP.Services;
 using DigitalMIDP.ViewModels;
 using DigitalMIDP.Views;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Windows;
 
 namespace DigitalMIDP;
@@ -13,6 +16,7 @@ namespace DigitalMIDP;
 public partial class App : System.Windows.Application
 {
     private IServiceProvider? _serviceProvider;
+    private FileLoggerProvider? _fileLoggerProvider;
 
     /// <summary>
     /// Gets the application service provider for resolving dependencies.
@@ -46,12 +50,21 @@ public partial class App : System.Windows.Application
             // Resolving MainViewModel explicitly first would be worse, not safer: GetService
             // *constructs* one if the main window was never opened, so an application that failed
             // during startup would build a ViewModel purely in order to dispose it.
+            _serviceProvider?.GetService<ILogger<App>>()?.LogInformation(
+                "Application exiting (exit code {ExitCode})", e.ApplicationExitCode);
+
             (_serviceProvider as IDisposable)?.Dispose();
         }
         catch (Exception ex)
         {
             // Never let cleanup turn a normal exit into a crash dialog.
             System.Diagnostics.Debug.WriteLine($"[WARN] Shutdown cleanup failed: {ex}");
+        }
+        finally
+        {
+            // Registered as an instance, so the container does not own it - closed last, after
+            // everything that might still log during disposal.
+            _fileLoggerProvider?.Dispose();
         }
 
         base.OnExit(e);
@@ -64,6 +77,8 @@ public partial class App : System.Windows.Application
             base.OnStartup(e);
 
             var configuration = LoadConfiguration();
+            _fileLoggerProvider = CreateFileLoggerProvider(configuration);
+
             if (!ApsClientConfiguration.HasValidClientId(configuration))
             {
                 if (!RunClientIdSetup(configuration))
@@ -77,15 +92,30 @@ public partial class App : System.Windows.Application
 
             // Configure and build the dependency injection container
             var services = new ServiceCollection();
-            ConfigureServices(services, configuration);
+            ConfigureServices(services, configuration, _fileLoggerProvider);
             _serviceProvider = services.BuildServiceProvider();
 
             var logger = _serviceProvider.GetRequiredService<ILogger<App>>();
+            LogEnvironment(logger, _fileLoggerProvider);
             logger.LogInformation("Application started successfully");
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[FATAL] Startup Error: {ex}");
+
+            // The container may not exist yet, so the file sink is written to directly - a failed
+            // startup on a user's machine is exactly what support needs to find in the log.
+            try
+            {
+                (_fileLoggerProvider ?? new FileLoggerProvider(FileLoggerProvider.DefaultDirectory))
+                    .CreateLogger(typeof(App).FullName!)
+                    .LogCritical(ex, "Fatal startup error");
+            }
+            catch
+            {
+                // Logging must never mask the original failure.
+            }
+
             MessageBox.Show(
                 $"Fatal Startup Error:\n\n{ex.Message}\n\nDetails:\n{ex.StackTrace}",
                 "Application Error",
@@ -120,6 +150,64 @@ public partial class App : System.Windows.Application
             logger?.LogError(ex, "Unhandled background thread exception");
             System.Diagnostics.Debug.WriteLine($"[BACKGROUND ERROR] {ex}");
         };
+    }
+
+    /// <summary>
+    /// Creates the on-disk log sink. Level and retention can be overridden per machine through the
+    /// usual configuration files (e.g. <c>"Logging": { "File": { "MinimumLevel": "Debug" } }</c> in
+    /// <c>%LocalAppData%\DigitalMIDP\autodesk.json</c>) when support needs more detail.
+    /// </summary>
+    private static FileLoggerProvider? CreateFileLoggerProvider(IConfiguration configuration)
+    {
+        try
+        {
+            var minimumLevel = Enum.TryParse<LogLevel>(configuration["Logging:File:MinimumLevel"], ignoreCase: true, out var level)
+                ? level
+                : LogLevel.Information;
+
+            var retentionDays = int.TryParse(configuration["Logging:File:RetentionDays"], out var days)
+                ? days
+                : FileLoggerProvider.DefaultRetentionDays;
+
+            return new FileLoggerProvider(FileLoggerProvider.DefaultDirectory, minimumLevel, retentionDays);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[WARN] File logging unavailable: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// One line describing the machine this session runs on, so a log file sent in by a user says
+    /// which build, OS and account it came from without anyone having to ask.
+    /// </summary>
+    private static void LogEnvironment(ILogger logger, FileLoggerProvider? fileLoggerProvider)
+    {
+        var assembly = Assembly.GetEntryAssembly() ?? typeof(App).Assembly;
+        var version = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+                      ?? assembly.GetName().Version?.ToString()
+                      ?? "unknown";
+
+        logger.LogInformation(
+            "Session start: {AppName} {AppVersion} | OS {OsDescription} ({OsArchitecture}) | Runtime {Runtime} ({ProcessArchitecture}) | " +
+            "Machine {MachineName} | User {UserDomain}\\{UserName} | Culture {Culture}/{UICulture} | TimeZone {TimeZone} | " +
+            "CPUs {ProcessorCount} | PID {ProcessId} | Log {LogFile}",
+            AppConstants.AppName,
+            version,
+            RuntimeInformation.OSDescription,
+            RuntimeInformation.OSArchitecture,
+            RuntimeInformation.FrameworkDescription,
+            RuntimeInformation.ProcessArchitecture,
+            Environment.MachineName,
+            Environment.UserDomainName,
+            Environment.UserName,
+            System.Globalization.CultureInfo.CurrentCulture.Name,
+            System.Globalization.CultureInfo.CurrentUICulture.Name,
+            TimeZoneInfo.Local.Id,
+            Environment.ProcessorCount,
+            Environment.ProcessId,
+            fileLoggerProvider?.CurrentFilePath ?? "(file logging unavailable)");
     }
 
     private static IConfigurationRoot LoadConfiguration() =>
@@ -160,7 +248,10 @@ public partial class App : System.Windows.Application
     /// launched, which is the slowest possible place to find out.
     /// </para>
     /// </summary>
-    internal static void ConfigureServices(IServiceCollection services, IConfiguration configuration)
+    internal static void ConfigureServices(
+        IServiceCollection services,
+        IConfiguration configuration,
+        ILoggerProvider? fileLoggerProvider = null)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
@@ -172,6 +263,14 @@ public partial class App : System.Windows.Application
         {
             logging.AddDebug(); // Output window
             logging.AddConsole();
+
+            // Persistent log on the user's machine. Optional so tests building the real container
+            // do not write into the developer's profile.
+            if (fileLoggerProvider is not null)
+            {
+                logging.AddProvider(fileLoggerProvider);
+            }
+
             logging.AddFilter("Microsoft", LogLevel.Warning);
             logging.AddFilter("System", LogLevel.Warning);
             logging.AddFilter(AppConstants.AppName, LogLevel.Debug);

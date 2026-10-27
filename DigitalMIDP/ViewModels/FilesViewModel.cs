@@ -24,6 +24,7 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
 {
     private readonly IFileListingUseCase _fileListingUseCase;
     private readonly IDataManagementService _dataManagementService;
+    private readonly ITokenProvider _tokenProvider;
     private readonly IOpenFileLocallyUseCase _openFileLocallyUseCase;
     private readonly IOpenFileLocationUseCase _openFileLocationUseCase;
     private readonly IGetLocalFilePathUseCase _getLocalFilePathUseCase;
@@ -42,6 +43,11 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
     // switched projects again before the first one finished) - see LoadFolderItemsAsync. Also
     // cancelled by CancelLoad (the user's own Cancel button) and by Dispose.
     private CancellationTokenSource? _loadFolderItemsCts;
+
+    // See SetAutoRefreshPaused. _autoRefreshMissed records that a tick was skipped while paused, so
+    // resuming catches up once instead of waiting out another full interval.
+    private bool _autoRefreshPaused;
+    private bool _autoRefreshMissed;
 
     private bool _disposed;
 
@@ -79,9 +85,6 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private string? currentFolderId;
-
-    [ObservableProperty]
-    private string? currentAccessToken;
 
     [ObservableProperty]
     private bool isLoading;
@@ -362,6 +365,7 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
     public FilesViewModel(
         IFileListingUseCase fileListingUseCase,
         IDataManagementService dataManagementService,
+        ITokenProvider tokenProvider,
         IOpenFileLocallyUseCase openFileLocallyUseCase,
         IOpenFileLocationUseCase openFileLocationUseCase,
         IGetLocalFilePathUseCase getLocalFilePathUseCase,
@@ -374,6 +378,7 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
     {
         ArgumentNullException.ThrowIfNull(fileListingUseCase);
         ArgumentNullException.ThrowIfNull(dataManagementService);
+        ArgumentNullException.ThrowIfNull(tokenProvider);
         ArgumentNullException.ThrowIfNull(openFileLocallyUseCase);
         ArgumentNullException.ThrowIfNull(openFileLocationUseCase);
         ArgumentNullException.ThrowIfNull(getLocalFilePathUseCase);
@@ -386,6 +391,7 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
 
         _fileListingUseCase = fileListingUseCase;
         _dataManagementService = dataManagementService;
+        _tokenProvider = tokenProvider;
         _openFileLocallyUseCase = openFileLocallyUseCase;
         _openFileLocationUseCase = openFileLocationUseCase;
         _getLocalFilePathUseCase = getLocalFilePathUseCase;
@@ -430,12 +436,12 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
 
     /// <summary>
     /// Loads items from the current project.
-    /// Set CurrentProjectId and CurrentAccessToken before calling.
+    /// Set CurrentHubId and CurrentProjectId before calling.
     /// </summary>
     [RelayCommand]
     public async Task LoadFolderItemsAsync()
     {
-        if (string.IsNullOrWhiteSpace(CurrentHubId) || string.IsNullOrWhiteSpace(CurrentProjectId) || string.IsNullOrWhiteSpace(CurrentAccessToken))
+        if (string.IsNullOrWhiteSpace(CurrentHubId) || string.IsNullOrWhiteSpace(CurrentProjectId))
         {
             return;
         }
@@ -454,7 +460,6 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
 
         var hubId = CurrentHubId!;
         var projectId = CurrentProjectId!;
-        var accessToken = CurrentAccessToken!;
 
         IsLoading = true;
         IsCancellingLoad = false;
@@ -465,6 +470,8 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
         {
             _logger.LogInformation("Loading files for hub {HubId} and project {ProjectId}", hubId, projectId);
 
+            // Fetched per call, never stored on the ViewModel - see TokenExposureTests.
+            var accessToken = await _tokenProvider.GetAccessTokenAsync(cancellationToken);
             var response = await _fileListingUseCase.GetAllProjectFilesAsync(hubId, projectId, accessToken, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             Items = new ObservableCollection<ItemDto>(response.Items);
@@ -667,6 +674,7 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
     {
         _autoRefreshTimer.Stop();
         _clipboardStatusTimer.Stop();
+        _autoRefreshMissed = false;
 
         _loadFolderItemsCts?.Cancel();
 
@@ -682,7 +690,6 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
         CurrentProjectId = null;
         CurrentProjectName = null;
         CurrentFolderId = null;
-        CurrentAccessToken = null;
         SyncedProjectStatus = null;
         ErrorMessage = null;
         ClipboardStatusText = null;
@@ -987,10 +994,11 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
                     "Local file open failed: {ErrorMessage}",
                     result.ErrorMessage);
                 
-                ErrorMessage = result.ErrorMessage ?? "Unable to open file locally.";
-                
+                var message = result.ErrorMessage ?? "Unable to open file locally.";
+                ErrorMessage = message;
+
                 // Show error dialog to user
-                ShowFileOpenErrorDialog(result.ErrorMessage, SelectedItem.WebViewLink);
+                ShowFileOpenErrorDialog(message, SelectedItem.WebViewLink);
             }
         }
         catch (Exception ex)
@@ -1046,8 +1054,9 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
                     "Open file location failed: {ErrorMessage}",
                     result.ErrorMessage);
 
-                ErrorMessage = result.ErrorMessage ?? "Unable to open file location.";
-                ShowFileOpenErrorDialog(result.ErrorMessage, SelectedItem.WebViewLink);
+                var message = result.ErrorMessage ?? "Unable to open file location.";
+                ErrorMessage = message;
+                ShowFileOpenErrorDialog(message, SelectedItem.WebViewLink);
             }
         }
         catch (Exception ex)
@@ -1189,13 +1198,21 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
             || IsLoading
             || IsCreatingDeliverables
             || string.IsNullOrWhiteSpace(CurrentHubId)
-            || string.IsNullOrWhiteSpace(CurrentProjectId)
-            || string.IsNullOrWhiteSpace(CurrentAccessToken))
+            || string.IsNullOrWhiteSpace(CurrentProjectId))
         {
             // Skipping while a deliverable batch runs is new and deliberate: an auto-refresh in the
             // middle of a batch re-reads the folder the batch is actively writing to, competing with
             // it for the rate limit for a listing that is out of date the moment the next file
             // lands.
+            return;
+        }
+
+        if (_autoRefreshPaused)
+        {
+            // Nobody can see the grid, so the full project walk would be wasted APS traffic - an
+            // application left open overnight on a locked machine otherwise re-walks the project
+            // every five minutes until morning. Resuming catches up once (SetAutoRefreshPaused).
+            _autoRefreshMissed = true;
             return;
         }
 
@@ -1205,6 +1222,33 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
         // uncached cost for data that had not changed.
         await LoadFolderItemsAsync();
         _ = RefreshSyncStatusAsync();
+    }
+
+    /// <summary>
+    /// Pauses or resumes the five-minute auto-refresh. Called by the view when the window is
+    /// minimised or the Windows session is locked, and again when it is visible.
+    ///
+    /// <para>
+    /// The timer itself keeps running (a tick that returns early costs nothing); only the APS work
+    /// is skipped. If at least one tick was skipped, resuming refreshes once straight away so the
+    /// user does not come back to a listing that is up to an interval older than they expect.
+    /// </para>
+    /// </summary>
+    public void SetAutoRefreshPaused(bool paused)
+    {
+        if (_autoRefreshPaused == paused)
+        {
+            return;
+        }
+
+        _autoRefreshPaused = paused;
+        _logger.LogInformation("Auto-refresh {State}", paused ? "paused (window not visible)" : "resumed");
+
+        if (!paused && _autoRefreshMissed)
+        {
+            _autoRefreshMissed = false;
+            AutoRefreshTimerTick(this, EventArgs.Empty);
+        }
     }
 
     private async Task LoadCustomAttributesAsync(CancellationToken cancellationToken)

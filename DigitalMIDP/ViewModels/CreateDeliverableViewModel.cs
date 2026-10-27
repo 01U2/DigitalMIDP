@@ -147,13 +147,13 @@ public sealed partial class CreateDeliverableViewModel : ObservableObject
 
     private readonly ICdeStructureUseCase _cdeStructureUseCase;
     private readonly IDataManagementService _dataManagementService;
+    private readonly ITokenProvider _tokenProvider;
     private readonly ITemplateCatalogUseCase _templateCatalogUseCase;
     private readonly IDocumentNumberUseCase _documentNumberUseCase;
     private readonly ILogger<CreateDeliverableViewModel> _logger;
 
     private string? _hubId;
     private string? _projectId;
-    private string? _accessToken;
     private NamingConventionDto _convention = NamingConventionDto.None;
     private IReadOnlyList<MetadataFieldDisplayDto> _relatedMetadata = [];
     private NamingConventionFieldDto? _typeField;
@@ -301,18 +301,21 @@ public sealed partial class CreateDeliverableViewModel : ObservableObject
     public CreateDeliverableViewModel(
         ICdeStructureUseCase cdeStructureUseCase,
         IDataManagementService dataManagementService,
+        ITokenProvider tokenProvider,
         ITemplateCatalogUseCase templateCatalogUseCase,
         IDocumentNumberUseCase documentNumberUseCase,
         ILogger<CreateDeliverableViewModel> logger)
     {
         ArgumentNullException.ThrowIfNull(cdeStructureUseCase);
         ArgumentNullException.ThrowIfNull(dataManagementService);
+        ArgumentNullException.ThrowIfNull(tokenProvider);
         ArgumentNullException.ThrowIfNull(templateCatalogUseCase);
         ArgumentNullException.ThrowIfNull(documentNumberUseCase);
         ArgumentNullException.ThrowIfNull(logger);
 
         _cdeStructureUseCase = cdeStructureUseCase;
         _dataManagementService = dataManagementService;
+        _tokenProvider = tokenProvider;
         _templateCatalogUseCase = templateCatalogUseCase;
         _documentNumberUseCase = documentNumberUseCase;
         _logger = logger;
@@ -327,16 +330,13 @@ public sealed partial class CreateDeliverableViewModel : ObservableObject
     public async Task InitializeAsync(
         string hubId,
         string projectId,
-        string accessToken,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(hubId);
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(accessToken);
 
         _hubId = hubId;
         _projectId = projectId;
-        _accessToken = accessToken;
 
         IsBusy = true;
         BusyMessage = "Loading project configuration...";
@@ -366,6 +366,8 @@ public sealed partial class CreateDeliverableViewModel : ObservableObject
                 return;
             }
 
+            // Fetched per call, never stored on the ViewModel - see TokenExposureTests.
+            var accessToken = await _tokenProvider.GetAccessTokenAsync(cancellationToken);
             var structure = await _cdeStructureUseCase.GetStructureAsync(
                 hubId, projectId, accessToken, cancellationToken);
 
@@ -573,7 +575,7 @@ public sealed partial class CreateDeliverableViewModel : ObservableObject
     /// </summary>
     private async Task LoadReviewAsync()
     {
-        if (_projectId is null || _accessToken is null || SelectedDiscipline is null)
+        if (_projectId is null || SelectedDiscipline is null)
         {
             return;
         }
@@ -583,8 +585,9 @@ public sealed partial class CreateDeliverableViewModel : ObservableObject
 
         try
         {
+            var accessToken = await _tokenProvider.GetAccessTokenAsync(CancellationToken.None);
             var documentNumber = await _documentNumberUseCase.AllocateNextAsync(
-                _projectId, SelectedDiscipline, _convention, CollectFieldValues(), _accessToken);
+                _projectId, SelectedDiscipline, _convention, CollectFieldValues(), accessToken);
 
             PreviewDocumentNumber = documentNumber.Value;
             PreviewLastDocumentNumber = ComputeLastNumberPreview(documentNumber, Quantity);
@@ -647,7 +650,7 @@ public sealed partial class CreateDeliverableViewModel : ObservableObject
     {
         ErrorMessage = null;
 
-        if (_hubId is null || _projectId is null || _accessToken is null
+        if (_hubId is null || _projectId is null
             || SelectedDiscipline is null || SelectedTemplate is null || DeliverableItems.Count == 0)
         {
             ErrorMessage = "The wizard is missing information needed to create the file.";
@@ -657,7 +660,9 @@ public sealed partial class CreateDeliverableViewModel : ObservableObject
         var request = new CreateDeliverableBatchRequestDto(
             HubId: _hubId,
             ProjectId: _projectId,
-            AccessToken: _accessToken,
+            // Left empty on purpose: the dialog never holds a token. MainWindow.RunDeliverableBatchAsync
+            // attaches a current one at the moment the batch actually runs.
+            AccessToken: string.Empty,
             Template: SelectedTemplate,
             DisciplineCode: SelectedDiscipline.Code,
             FieldValues: CollectFieldValues(),
