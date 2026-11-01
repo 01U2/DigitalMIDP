@@ -2,21 +2,20 @@
 
 	<PropertyGroup>
 		<OutputName>DigitalMIDP-Setup</OutputName>
-		<Platform>x64</Platform>
+		<InstallerPlatform>x64</InstallerPlatform>
 		<AcceptEula>wix7</AcceptEula>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<None Include="Data\UserAgreement.rtf" />
 
-		<!-- Builds the WPF app first; its build output folder is exposed as $(DigitalMIDP.TargetDir). -->
+		<!-- Builds the WPF app first; its build output folder is exposed as $(var.DigitalMIDP.TargetDir). -->
 		<ProjectReference Include="..\DigitalMIDP\DigitalMIDP.csproj" />
-
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="WixToolset.UI.wixext" Version="6.0.2" />
-		<PackageReference Include="WixToolset.Netfx.wixext" Version="6.0.2" />
+		<PackageReference Include="WixToolset.UI.wixext" Version="7.0.1" />
+		<PackageReference Include="WixToolset.Netfx.wixext" Version="7.0.1" />
 	</ItemGroup>
 
 </Project>
