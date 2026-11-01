@@ -48,7 +48,7 @@
 		</Feature>
 
 		<!-- License agreement page -->
-		<WixVariable Id="WixUILicenseRtf" Value="Assets\License.rtf" />
+		<WixVariable Id="WixUILicenseRtf" Value="Data\UserAgreement.rtf" />
 
 		<!-- Welcome -> License Agreement -> Install Folder -> Install -> Finish -->
 		<Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
