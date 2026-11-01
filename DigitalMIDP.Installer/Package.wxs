@@ -16,7 +16,7 @@
 	<Package Name="DigitalMIDP"
 			 Manufacturer="01U2"
 			 Version="0.1.0.0"
-			 UpgradeCode="PUT-A-NEW-GUID-HERE"
+			 UpgradeCode="978D8E3F-C2F5-40C0-87BB-82892FF30A67"
 			 Scope="perMachine">
 
 		<MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
