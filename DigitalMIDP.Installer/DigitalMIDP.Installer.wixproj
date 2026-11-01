@@ -3,6 +3,7 @@
 	<PropertyGroup>
 		<OutputName>DigitalMIDP-Setup</OutputName>
 		<Platform>x64</Platform>
+		<AcceptEula>wix7</AcceptEula>
 	</PropertyGroup>
 
 	<ItemGroup>
