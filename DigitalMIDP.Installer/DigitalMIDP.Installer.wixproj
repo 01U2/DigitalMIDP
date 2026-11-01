@@ -1,5 +1,21 @@
 ﻿<Project Sdk="WixToolset.Sdk/7.0.1">
-  <ItemGroup>
-    <None Include="Data\UserAgreement.rtf" />
-  </ItemGroup>
+
+	<PropertyGroup>
+		<OutputName>DigitalMIDP-Setup</OutputName>
+		<Platform>x64</Platform>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Include="Data\UserAgreement.rtf" />
+
+		<!-- Builds the WPF app first; its build output folder is exposed as $(DigitalMIDP.TargetDir). -->
+		<ProjectReference Include="..\DigitalMIDP\DigitalMIDP.csproj" />
+
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="WixToolset.UI.wixext" Version="6.0.2" />
+		<PackageReference Include="WixToolset.Netfx.wixext" Version="6.0.2" />
+	</ItemGroup>
+
 </Project>
