@@ -1,5 +1,5 @@
 ﻿<Project Sdk="WixToolset.Sdk/7.0.1">
   <ItemGroup>
-    <Folder Include="Data\" />
+    <None Include="Data\UserAgreement.rtf" />
   </ItemGroup>
 </Project>
