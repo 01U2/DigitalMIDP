@@ -12,14 +12,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Ensure your entries are concise, factual, and verified.
 
 ---
-
-## [2026-10-22] - Tag-driven release workflow
+## [2026-11-07] Release v1.1.0
 
 ### Added
+- Automated GitHub release workflow triggered by version tags.
+- Release documentation (docs/RELEASING.md).
 - `.github/workflows/release.yml`: on `v*.*.*` tags on `main`, builds, tests, stamps the version into the app and MSI, and publishes a GitHub Release with the MSI attached.
 - `docs/RELEASING.md` describing the release process.
 
 ### Changed
+- MSI installer version is now automatically derived from the application version during the release build.
+- Release workflow now builds, tests, packages and publishes the MSI installer alongside the GitHub Release.
 - MSI version now comes from the `Version` MSBuild property (default `0.1.0`) instead of being hard-coded in `Package.wxs`.
 
 ---
