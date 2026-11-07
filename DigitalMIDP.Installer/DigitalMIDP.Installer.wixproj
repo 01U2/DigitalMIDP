@@ -6,6 +6,9 @@
 		<AcceptEula>wix7</AcceptEula>
 		<!-- Per-user install: harvested files in the user profile use file key paths, not HKCU. -->
 		<SuppressIces>ICE38;ICE64;ICE91</SuppressIces>
+		<!-- Release builds pass -p:Version=x.y.z (from the git tag); local builds fall back to this. -->
+		<Version Condition="'$(Version)' == ''">0.1.0</Version>
+		<DefineConstants>$(DefineConstants);ProductVersion=$(Version)</DefineConstants>
 	</PropertyGroup>
 
 	<ItemGroup>
