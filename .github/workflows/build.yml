@@ -14,6 +14,8 @@ env:
 
 jobs:
   build:
+    # Skip when syncing main back into develop; that code was already built and released.
+    if: github.event_name != 'pull_request' || github.head_ref != 'main'
     runs-on: windows-latest
 
     steps:
