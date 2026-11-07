@@ -4,6 +4,8 @@
 		<OutputName>DigitalMIDP-Setup</OutputName>
 		<InstallerPlatform>x64</InstallerPlatform>
 		<AcceptEula>wix7</AcceptEula>
+		<!-- Per-user install: harvested files in the user profile use file key paths, not HKCU. -->
+		<SuppressIces>ICE38;ICE64;ICE91</SuppressIces>
 	</PropertyGroup>
 
 	<ItemGroup>
