@@ -13,18 +13,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [2026-10-22] - Main window starts maximized
+## [2026-10-22] - Tag-driven release workflow
+
+### Added
+- `.github/workflows/release.yml`: on `v*.*.*` tags on `main`, builds, tests, stamps the version into the app and MSI, and publishes a GitHub Release with the MSI attached.
+- `docs/RELEASING.md` describing the release process.
 
 ### Changed
-- `MainWindow` now opens with `WindowState="Maximized"`. Restoring the window returns it to 1200x700.
+- MSI version now comes from the `Version` MSBuild property (default `0.1.0`) instead of being hard-coded in `Package.wxs`.
 
 ---
 
-## [2026-10-22] - Per-user installer
+## [2026-10-22] - DigialMIDP Installer improvements
 
 ### Changed
 - MSI installer now uses `Scope="perUser"` and installs to `%LOCALAPPDATA%\Programs\DigitalMIDP`, so no admin elevation is required. Start Menu shortcut goes to the per-user Start Menu.
 - Suppressed ICE38/ICE64/ICE91 validation for the per-user layout.
+- `MainWindow` now opens with `WindowState="Maximized"`. Restoring the window returns it to 1200x700.
 
 ### Added
 - `InstallFolderCleanup` component that removes the install folder on uninstall.
