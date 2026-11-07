@@ -89,3 +89,5 @@ Autodesk Desktop Connector is a **first-class integration**:
 1. **Authentication:** 3-legged OAuth 2.0 with PKCE via APS `/authentication/v2/authorize` and `/authentication/v2/token`.
 2. **Local Token Protection:** Tokens at rest are encrypted using Windows Data Protection API (DPAPI) via `DataProtectionScope.CurrentUser`.
 3. **No Cleartext Credentials:** Client secrets and bearer tokens are never logged, checked into source control, or persisted unencrypted.
+4. **No Tokens in UI State:** ViewModels never store OAuth tokens. Where a use case takes one, it is fetched from `ITokenProvider` for that call only; `ApsAuthorizationHandler` attaches the current token to each APS request.
+5. **Local Diagnostics:** Logs are written to `%LocalAppData%\DigitalMIDP\Logs` by `FileLoggerProvider`, which also redacts anything shaped like a credential before it reaches disk.

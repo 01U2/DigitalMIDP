@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DigitalMIDP.Application.Dtos;
+using DigitalMIDP.Application.Interfaces;
 using DigitalMIDP.Application.UseCases;
 using Microsoft.Extensions.Logging;
 
@@ -12,6 +13,7 @@ namespace DigitalMIDP.ViewModels;
 public sealed partial class HubSelectionViewModel : ObservableObject
 {
     private readonly IFileListingUseCase _fileListingUseCase;
+    private readonly ITokenProvider _tokenProvider;
     private readonly ILogger<HubSelectionViewModel> _logger;
 
     [ObservableProperty]
@@ -28,12 +30,15 @@ public sealed partial class HubSelectionViewModel : ObservableObject
 
     public HubSelectionViewModel(
         IFileListingUseCase fileListingUseCase,
+        ITokenProvider tokenProvider,
         ILogger<HubSelectionViewModel> logger)
     {
         ArgumentNullException.ThrowIfNull(fileListingUseCase);
+        ArgumentNullException.ThrowIfNull(tokenProvider);
         ArgumentNullException.ThrowIfNull(logger);
 
         _fileListingUseCase = fileListingUseCase;
+        _tokenProvider = tokenProvider;
         _logger = logger;
     }
 
@@ -41,13 +46,8 @@ public sealed partial class HubSelectionViewModel : ObservableObject
     /// Loads available hubs for the authenticated user.
     /// </summary>
     [RelayCommand]
-    public async Task LoadHubsAsync(string accessToken)
+    public async Task LoadHubsAsync()
     {
-        if (string.IsNullOrWhiteSpace(accessToken))
-        {
-            return;
-        }
-
         IsLoading = true;
         ErrorMessage = null;
 
@@ -55,6 +55,8 @@ public sealed partial class HubSelectionViewModel : ObservableObject
         {
             _logger.LogInformation("Loading hubs");
 
+            // Fetched per call, never stored on the ViewModel - see TokenExposureTests.
+            var accessToken = await _tokenProvider.GetAccessTokenAsync(CancellationToken.None);
             var response = await _fileListingUseCase.GetHubsAsync(accessToken, CancellationToken.None);
             Hubs = new List<HubDto>(response.Hubs);
 

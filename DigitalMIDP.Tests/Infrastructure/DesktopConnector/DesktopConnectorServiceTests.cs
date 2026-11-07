@@ -62,9 +62,9 @@ public class DesktopConnectorServiceTests
         _mockLogger.Received().Log(
             LogLevel.Information,
             Arg.Any<EventId>(),
-            Arg.Is<object>(s => s.ToString().Contains("Detecting Desktop Connector")),
+            Arg.Is<object>(s => s.ToString()!.Contains("Detecting Desktop Connector")),
             Arg.Any<Exception>(),
-            Arg.Any<Func<object, Exception, string>>());
+            Arg.Any<Func<object, Exception?, string>>());
     }
 
     #endregion
@@ -423,9 +423,9 @@ public class DesktopConnectorServiceTests
             _mockLogger.Received().Log(
                 LogLevel.Information,
                 Arg.Any<EventId>(),
-                Arg.Is<object>(s => s.ToString().Contains("Attempting to open file")),
+                Arg.Is<object>(s => s.ToString()!.Contains("Attempting to open file")),
                 Arg.Any<Exception>(),
-                Arg.Any<Func<object, Exception, string>>());
+                Arg.Any<Func<object, Exception?, string>>());
         }
         finally
         {

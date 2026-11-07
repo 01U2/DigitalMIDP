@@ -1,8 +1,10 @@
 ﻿using DigitalMIDP.Application.Dtos;
+using DigitalMIDP.Application.Interfaces;
 using DigitalMIDP.Application.UseCases;
 using DigitalMIDP.ViewModels;
 using DigitalMIDP.Views;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Win32;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -20,6 +22,7 @@ public partial class MainWindow : Window
 {
     private MainViewModel? _viewModel;
     private readonly Dictionary<string, DataGridColumn> _dynamicColumns = new();
+    private bool _isSessionLocked;
 
     public MainWindow()
     {
@@ -31,7 +34,43 @@ public partial class MainWindow : Window
 
         // Add handlers to dynamically add custom attribute columns
         Loaded += MainWindow_Loaded;
+
+        // Auto-refresh is paused while nobody can see the grid - see FilesViewModel.SetAutoRefreshPaused.
+        // SystemEvents is static, so the handler is detached in OnClosed or it would keep this window alive.
+        StateChanged += (_, _) => UpdateAutoRefreshPause();
+        SystemEvents.SessionSwitch += OnSessionSwitch;
     }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        SystemEvents.SessionSwitch -= OnSessionSwitch;
+        base.OnClosed(e);
+    }
+
+    private void OnSessionSwitch(object sender, SessionSwitchEventArgs e)
+    {
+        switch (e.Reason)
+        {
+            case SessionSwitchReason.SessionLock:
+            case SessionSwitchReason.ConsoleDisconnect:
+            case SessionSwitchReason.RemoteDisconnect:
+                _isSessionLocked = true;
+                break;
+            case SessionSwitchReason.SessionUnlock:
+            case SessionSwitchReason.ConsoleConnect:
+            case SessionSwitchReason.RemoteConnect:
+                _isSessionLocked = false;
+                break;
+            default:
+                return;
+        }
+
+        // SessionSwitch is raised on a SystemEvents thread; the ViewModel and its timer belong to the UI thread.
+        Dispatcher.BeginInvoke(UpdateAutoRefreshPause);
+    }
+
+    private void UpdateAutoRefreshPause() =>
+        _viewModel?.FilesViewModel.SetAutoRefreshPaused(WindowState == WindowState.Minimized || _isSessionLocked);
 
     /// <summary>
     /// Initializes dynamic DataGrid columns for custom attributes.
@@ -630,8 +669,7 @@ public partial class MainWindow : Window
         }
 
         if (string.IsNullOrWhiteSpace(filesViewModel.CurrentHubId)
-            || string.IsNullOrWhiteSpace(filesViewModel.CurrentProjectId)
-            || string.IsNullOrWhiteSpace(filesViewModel.CurrentAccessToken))
+            || string.IsNullOrWhiteSpace(filesViewModel.CurrentProjectId))
         {
             MessageBox.Show(
                 "Select a hub and project before creating a deliverable.",
@@ -672,8 +710,7 @@ public partial class MainWindow : Window
         {
             await createViewModel.InitializeAsync(
                 filesViewModel.CurrentHubId!,
-                filesViewModel.CurrentProjectId!,
-                filesViewModel.CurrentAccessToken!);
+                filesViewModel.CurrentProjectId!);
         };
 
         dialog.ShowDialog();
@@ -703,6 +740,11 @@ public partial class MainWindow : Window
 
         try
         {
+            // The wizard builds the request without a token (it never holds one); a current token is
+            // attached only here, for the duration of the call.
+            var tokenProvider = App.Services.GetRequiredService<ITokenProvider>();
+            request = request with { AccessToken = await tokenProvider.GetAccessTokenAsync(cancellationToken) };
+
             var createDeliverableUseCase = App.Services.GetRequiredService<ICreateDeliverableUseCase>();
             var result = await createDeliverableUseCase.CreateManyAsync(request, progress, cancellationToken);
 

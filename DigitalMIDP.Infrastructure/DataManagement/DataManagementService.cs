@@ -105,7 +105,22 @@ internal sealed partial class DataManagementService : IDataManagementService
     /// Retrieves all hubs accessible to the authenticated user.
     /// GET /project/v1/hubs
     /// </summary>
-    public async Task<IEnumerable<HubDto>> GetHubsAsync(string accessToken, CancellationToken cancellationToken)
+    public Task<IEnumerable<HubDto>> GetHubsAsync(string accessToken, CancellationToken cancellationToken)
+    {
+        // The hub list was re-fetched (every page) on each sign-in, and the project list on every
+        // hub selection - including flipping back to a hub already looked at. Neither changes within
+        // a session in any way the user is waiting on. Not project-scoped (projectId null), so a
+        // project Refresh leaves them alone; sign-out clears the whole cache, so a second user never
+        // sees the first user's hubs.
+        return _cache.GetOrAddAsync(
+            null,
+            "hubs",
+            SchemaCacheLifetime,
+            ct => FetchHubsAsync(ct),
+            cancellationToken);
+    }
+
+    private async Task<IEnumerable<HubDto>> FetchHubsAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("Fetching hubs from APS");
 
@@ -183,12 +198,26 @@ internal sealed partial class DataManagementService : IDataManagementService
     /// Retrieves all projects within a specific hub.
     /// GET /project/v1/hubs/{hubId}/projects
     /// </summary>
-    public async Task<IEnumerable<ProjectDto>> GetProjectsAsync(
+    public Task<IEnumerable<ProjectDto>> GetProjectsAsync(
         string hubId,
         string accessToken,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(hubId);
+
+        // See GetHubsAsync for why this is cached and how it is cleared.
+        return _cache.GetOrAddAsync(
+            null,
+            $"projects:{hubId}",
+            SchemaCacheLifetime,
+            ct => FetchProjectsAsync(hubId, ct),
+            cancellationToken);
+    }
+
+    private async Task<IEnumerable<ProjectDto>> FetchProjectsAsync(
+        string hubId,
+        CancellationToken cancellationToken)
+    {
         _logger.LogInformation("Fetching projects for hub {HubId}", hubId);
 
         try
@@ -442,7 +471,7 @@ internal sealed partial class DataManagementService : IDataManagementService
         // Deliberately keyed separately from GetNamingConventionAsync below. The two paths consume
         // overlapping sources but answer opposite questions (which attributes are NOT part of the
         // filename, versus which ones ARE), and sharing one cached result between them is exactly
-        // the kind of conflation CLAUDE.md warns against - the underlying per-endpoint caches are
+        // a conflation that would couple two unrelated features - the underlying per-endpoint caches are
         // where the shared work is actually reused.
         return _cache.GetOrAddAsync(
             projectId,
@@ -1185,7 +1214,7 @@ internal sealed partial class DataManagementService : IDataManagementService
             if (resultsElement.ValueKind != JsonValueKind.Array)
             {
                 // This endpoint family has returned several different envelope shapes over time (see
-                // the switch above and CLAUDE.md), so a shape nobody recognises is the one case
+                // the switch above), so a shape nobody recognises is the one case
                 // where the body earns its place in the log - truncated, and at Warning.
                 _logger.LogWarning(
                     "Custom attribute definitions response ({Context}) had no recognizable array (rootKind={RootKind}). Body: {Body}",
@@ -1241,7 +1270,7 @@ internal sealed partial class DataManagementService : IDataManagementService
                 // Additive only: reads a "required" key when "optional" itself is absent, same as the
                 // creation wizard's path. The fallback stays "optional" when neither is present -
                 // this list feeds the grid/Edit Attributes, a deliberately separate path from
-                // GetNamingConventionAsync (see CLAUDE.md), and its default direction is not changed.
+                // GetNamingConventionAsync, and its default direction is not changed.
                 Optional: ResolveOptionalFlag(d.Optional, d.Required) ?? true,
                 Options: d.ArrayValues?
                     .Select(v => new MetadataOptionDisplayDto(v, null))

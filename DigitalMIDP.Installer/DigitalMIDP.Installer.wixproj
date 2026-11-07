@@ -1,0 +1,26 @@
+﻿<Project Sdk="WixToolset.Sdk/7.0.1">
+
+	<PropertyGroup>
+		<OutputName>DigitalMIDP-Setup</OutputName>
+		<InstallerPlatform>x64</InstallerPlatform>
+		<AcceptEula>wix7</AcceptEula>
+		<!-- Per-user install: harvested files in the user profile use file key paths, not HKCU. -->
+		<SuppressIces>ICE38;ICE64;ICE91</SuppressIces>
+		<!-- Release builds pass -p:Version=x.y.z (from the git tag); local builds fall back to this. -->
+		<Version Condition="'$(Version)' == ''">0.1.0</Version>
+		<DefineConstants>$(DefineConstants);ProductVersion=$(Version)</DefineConstants>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Include="Data\UserAgreement.rtf" />
+
+		<!-- Builds the WPF app first; its build output folder is exposed as $(var.DigitalMIDP.TargetDir). -->
+		<ProjectReference Include="..\DigitalMIDP\DigitalMIDP.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="WixToolset.UI.wixext" Version="7.0.1" />
+		<PackageReference Include="WixToolset.Netfx.wixext" Version="7.0.1" />
+	</ItemGroup>
+
+</Project>
