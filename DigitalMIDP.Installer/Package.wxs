@@ -1,0 +1,81 @@
+﻿<!--<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Id="TODO_Manufacturer.DigitalMIDP.Installer" Name="DigitalMIDP.Installer" Manufacturer="TODO Manufacturer" Version="1.0.0">
+    <MajorUpgrade DowngradeErrorMessage="!(loc.DowngradeError)" />
+
+    <Feature Id="Main">
+      <ComponentGroupRef Id="ExampleComponents" />
+    </Feature>
+  </Package>
+</Wix>-->
+
+
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
+     xmlns:netfx="http://wixtoolset.org/schemas/v4/wxs/netfx">
+
+	<Package Name="DigitalMIDP"
+			 Manufacturer="01U2"
+			 Version="0.1.0.0"
+			 UpgradeCode="978D8E3F-C2F5-40C0-87BB-82892FF30A67"
+			 Scope="perMachine">
+
+		<MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+		<MediaTemplate EmbedCab="yes" />
+
+		<!-- Blocks install when the .NET 8 Desktop Runtime (x64) is missing. -->
+		<netfx:DotNetCompatibilityCheck Property="DOTNETDESKTOP8"
+										RollForward="latestMinor"
+										RuntimeType="desktop"
+										Platform="x64"
+										Version="8.0.0" />
+		<Launch Condition="Installed OR DOTNETDESKTOP8=&quot;0&quot;"
+				Message="DigitalMIDP requires the .NET 8 Desktop Runtime (x64). Install it from https://dotnet.microsoft.com/download/dotnet/8.0 and run setup again." />
+
+		<Icon Id="AppIcon" SourceFile="..\DigitalMIDP\Assets\Icons\icon.ico" />
+		<Property Id="ARPPRODUCTICON" Value="AppIcon" />
+
+		<StandardDirectory Id="ProgramFiles64Folder">
+			<Directory Id="INSTALLFOLDER" Name="DigitalMIDP" />
+		</StandardDirectory>
+
+		<StandardDirectory Id="ProgramMenuFolder">
+			<Directory Id="AppMenuFolder" Name="DigitalMIDP" />
+		</StandardDirectory>
+
+		<Feature Id="Main">
+			<ComponentGroupRef Id="AppFiles" />
+			<ComponentRef Id="StartMenuShortcut" />
+		</Feature>
+
+		<!-- License agreement page -->
+		<WixVariable Id="WixUILicenseRtf" Value="Data\UserAgreement.rtf" />
+
+		<!-- Welcome -> License Agreement -> Install Folder -> Install -> Finish -->
+		<Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+		<ui:WixUI Id="WixUI_InstallDir" />
+	</Package>
+
+	<Fragment>
+		<!-- Every file comes from the DigitalMIDP build output folder (bin\<Configuration>\net8.0-windows\). -->
+		<ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+			<Component>
+				<File Id="MainExe" Source="$(DigitalMIDP.TargetDir)DigitalMIDP.exe" KeyPath="yes" />
+			</Component>
+			<Files Include="$(DigitalMIDP.TargetDir)**">
+				<Exclude Files="$(DigitalMIDP.TargetDir)DigitalMIDP.exe" />
+				<Exclude Files="$(DigitalMIDP.TargetDir)**\*.pdb" />
+			</Files>
+		</ComponentGroup>
+
+		<Component Id="StartMenuShortcut" Directory="AppMenuFolder">
+			<Shortcut Name="DigitalMIDP"
+					  Target="[INSTALLFOLDER]DigitalMIDP.exe"
+					  WorkingDirectory="INSTALLFOLDER"
+					  Icon="AppIcon" />
+			<RemoveFolder Id="RemoveAppMenuFolder" On="uninstall" />
+			<RegistryValue Root="HKCU" Key="Software\01U2\DigitalMIDP"
+						   Name="installed" Type="integer" Value="1" KeyPath="yes" />
+		</Component>
+	</Fragment>
+
+</Wix>
