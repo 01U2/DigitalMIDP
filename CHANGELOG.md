@@ -13,6 +13,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2026-10-22] - Main window starts maximized
+
+### Changed
+- `MainWindow` now opens with `WindowState="Maximized"`. Restoring the window returns it to 1200x700.
+
+---
+
+## [2026-10-22] - Per-user installer
+
+### Changed
+- MSI installer now uses `Scope="perUser"` and installs to `%LOCALAPPDATA%\Programs\DigitalMIDP`, so no admin elevation is required. Start Menu shortcut goes to the per-user Start Menu.
+- Suppressed ICE38/ICE64/ICE91 validation for the per-user layout.
+
+### Added
+- `InstallFolderCleanup` component that removes the install folder on uninstall.
+
+---
+
 ## [2026-10-21] - Build warnings and open-source readiness
 
 ### Fixed

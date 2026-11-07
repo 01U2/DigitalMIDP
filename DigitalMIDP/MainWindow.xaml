@@ -6,6 +6,7 @@
         xmlns:converters="clr-namespace:DigitalMIDP.Converters"
         mc:Ignorable="d"
         Title="Digital MIDP - APS File Browser" Height="700" Width="1200"
+        WindowState="Maximized"
          Icon="/DigitalMIDP;component/Assets/Icons/icon.ico"
         Background="#F0F0F0">
     

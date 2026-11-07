@@ -17,7 +17,7 @@
 			 Manufacturer="01U2"
 			 Version="0.1.0.0"
 			 UpgradeCode="978D8E3F-C2F5-40C0-87BB-82892FF30A67"
-			 Scope="perMachine">
+			 Scope="perUser">
 
 		<MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
 		<MediaTemplate EmbedCab="yes" />
@@ -34,8 +34,11 @@
 		<Icon Id="AppIcon" SourceFile="..\DigitalMIDP\Assets\Icons\icon.ico" />
 		<Property Id="ARPPRODUCTICON" Value="AppIcon" />
 
-		<StandardDirectory Id="ProgramFiles64Folder">
-			<Directory Id="INSTALLFOLDER" Name="DigitalMIDP" />
+		<!-- %LOCALAPPDATA%\Programs\DigitalMIDP (user-writable, no elevation) -->
+		<StandardDirectory Id="LocalAppDataFolder">
+			<Directory Id="ProgramsFolder" Name="Programs">
+				<Directory Id="INSTALLFOLDER" Name="DigitalMIDP" />
+			</Directory>
 		</StandardDirectory>
 
 		<StandardDirectory Id="ProgramMenuFolder">
@@ -44,6 +47,7 @@
 
 		<Feature Id="Main">
 			<ComponentGroupRef Id="AppFiles" />
+			<ComponentRef Id="InstallFolderCleanup" />
 			<ComponentRef Id="StartMenuShortcut" />
 		</Feature>
 
@@ -66,6 +70,13 @@
 				<Exclude Files="$(DigitalMIDP.TargetDir)**\*.pdb" />
 			</Files>
 		</ComponentGroup>
+
+		<!-- Removes the per-user install folder on uninstall -->
+		<Component Id="InstallFolderCleanup" Directory="INSTALLFOLDER">
+			<RemoveFolder Id="RemoveInstallFolder" On="uninstall" />
+			<RegistryValue Root="HKCU" Key="Software\01U2\DigitalMIDP"
+						   Name="installdir" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+		</Component>
 
 		<Component Id="StartMenuShortcut" Directory="AppMenuFolder">
 			<Shortcut Name="DigitalMIDP"
