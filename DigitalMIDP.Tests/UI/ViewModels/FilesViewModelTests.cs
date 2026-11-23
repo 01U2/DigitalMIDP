@@ -1,6 +1,7 @@
-﻿using FluentAssertions;
+using FluentAssertions;
 using DigitalMIDP.Application.Dtos;
 using DigitalMIDP.Application.Interfaces;
+using DigitalMIDP.Application.Manifests;
 using DigitalMIDP.Application.UseCases;
 using DigitalMIDP.Services;
 using DigitalMIDP.ViewModels;
@@ -18,13 +19,11 @@ namespace DigitalMIDP.Tests.UI.ViewModels;
 public sealed class FilesViewModelTests
 {
     private readonly IDataManagementService _dataManagementService;
-    private readonly FileListingUseCase _fileListingUseCase;
     private readonly IOpenFileLocallyUseCase _openFileLocallyUseCase;
     private readonly IOpenFileLocationUseCase _openFileLocationUseCase;
     private readonly IGetLocalFilePathUseCase _getLocalFilePathUseCase;
     private readonly IGetDesktopConnectorStatusUseCase _getDesktopConnectorStatusUseCase;
     private readonly IGetSyncedProjectStatusUseCase _getSyncedProjectStatusUseCase;
-    private readonly ICdeStructureUseCase _cdeStructureUseCase;
     private readonly ColumnSelectorViewModel _columnSelectorViewModel;
     private readonly FileFilterViewModel _fileFilterViewModel;
     private readonly ILogger<FilesViewModel> _logger;
@@ -32,14 +31,11 @@ public sealed class FilesViewModelTests
     public FilesViewModelTests()
     {
         _dataManagementService = Substitute.For<IDataManagementService>();
-        _fileListingUseCase = new FileListingUseCase(
-            _dataManagementService, Substitute.For<ILogger<FileListingUseCase>>());
         _openFileLocallyUseCase = Substitute.For<IOpenFileLocallyUseCase>();
         _openFileLocationUseCase = Substitute.For<IOpenFileLocationUseCase>();
         _getLocalFilePathUseCase = Substitute.For<IGetLocalFilePathUseCase>();
         _getDesktopConnectorStatusUseCase = Substitute.For<IGetDesktopConnectorStatusUseCase>();
         _getSyncedProjectStatusUseCase = Substitute.For<IGetSyncedProjectStatusUseCase>();
-        _cdeStructureUseCase = Substitute.For<ICdeStructureUseCase>();
         _columnSelectorViewModel = new ColumnSelectorViewModel();
         _fileFilterViewModel = new FileFilterViewModel(
             new FilterPreferencesStore(Substitute.For<ILogger<FilterPreferencesStore>>()),
@@ -48,357 +44,16 @@ public sealed class FilesViewModelTests
     }
 
     private FilesViewModel CreateViewModel() => new(
-        _fileListingUseCase,
+        Substitute.For<ILocalManifestReader>(),
         _dataManagementService,
-        TokenProvider(),
         _openFileLocallyUseCase,
         _openFileLocationUseCase,
         _getLocalFilePathUseCase,
         _getDesktopConnectorStatusUseCase,
         _getSyncedProjectStatusUseCase,
-        _cdeStructureUseCase,
         _columnSelectorViewModel,
         _fileFilterViewModel,
         _logger);
-
-    private static Task LoadCustomAttributesAsync(FilesViewModel viewModel)
-    {
-        var method = typeof(FilesViewModel).GetMethod(
-            "LoadCustomAttributesAsync",
-            BindingFlags.NonPublic | BindingFlags.Instance);
-        return (Task)method!.Invoke(viewModel, new object[] { CancellationToken.None })!;
-    }
-
-    #region Metadata Loading Tests
-
-    [Fact]
-    public void ChangingProject_ClearsPriorProjectTitleFromGridMetadata()
-    {
-        var viewModel = CreateViewModel();
-        viewModel.CurrentProjectId = "b.old";
-        viewModel.AvailableMetadataFields.Add(new MetadataFieldDisplayDto("Title", "string", null, true, [], null, 1));
-        viewModel.NamingCodeFields.Add(new MetadataFieldDisplayDto("Old Code", "string", null, true, [], null, 2));
-        viewModel.GridMetadataFields.Select(f => f.Name).Should().Contain("Title");
-
-        viewModel.CurrentProjectId = "b.new";
-
-        viewModel.AvailableMetadataFields.Should().BeEmpty();
-        viewModel.NamingCodeFields.Should().BeEmpty();
-        viewModel.GridMetadataFields.Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task LoadProjectMetadataAsync_StaleResponse_DoesNotReintroduceOldTitle()
-    {
-        var oldResponse = new TaskCompletionSource<ProjectNamingStandardDto>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _dataManagementService.GetProjectNamingStandardAsync("hub", "b.old", Arg.Any<CancellationToken>())
-            .Returns(_ => oldResponse.Task);
-        _dataManagementService.GetProjectNamingStandardAsync("hub", "b.new", Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new ProjectNamingStandardDto("new", "New", [])));
-        var viewModel = CreateViewModel();
-        viewModel.CurrentHubId = "hub";
-        viewModel.CurrentProjectId = "b.old";
-
-        var pending = viewModel.LoadProjectMetadataAsync();
-        viewModel.CurrentProjectId = "b.new";
-        await viewModel.LoadProjectMetadataAsync();
-        oldResponse.SetResult(new ProjectNamingStandardDto("old", "Old",
-            [new MetadataFieldDisplayDto("Title", "string", null, true, [], null, 1)]));
-        await pending;
-
-        viewModel.GridMetadataFields.Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task LoadProjectMetadataAsync_CurrentProjectWithTitle_KeepsDynamicTitleField()
-    {
-        _dataManagementService.GetProjectNamingStandardAsync("hub", "b.current", Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new ProjectNamingStandardDto("current", "Current",
-                [new MetadataFieldDisplayDto("Title", "string", null, true, [], null, 1)])));
-        var viewModel = CreateViewModel();
-        viewModel.CurrentHubId = "hub";
-        viewModel.CurrentProjectId = "b.current";
-
-        await viewModel.LoadProjectMetadataAsync();
-
-        viewModel.GridMetadataFields.Select(f => f.Name).Should().ContainSingle().Which.Should().Be("Title");
-    }
-
-    [Fact]
-    public async Task LoadCustomAttributesAsync_WithCustomAttributes_UpdatesAvailableMetadataFields()
-    {
-        // Arrange
-        var projectId = "b.projectId123";
-        var itemUrn = "urn:adsk.bim360:dm.item:itemId:dm.version:versionId";
-
-        var items = new ObservableCollection<ItemDto>
-        {
-            new ItemDto
-            {
-                Id = "itemId",
-                Name = "File1.rvt",
-                Type = ItemType.File,
-                ItemUrn = itemUrn
-            }
-        };
-
-        var customAttributes = new[]
-        {
-            new ItemCustomAttributesResultDto(
-                Urn: itemUrn,
-                Name: "File1.rvt",
-                Title: "File1.rvt",
-                LastModifiedTime: null,
-                LastModifiedUserName: null,
-                RevisionNumber: null,
-                ApprovalStatus: null,
-                PathInProject: null,
-                WebViewLink: null,
-                Attributes: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
-                {
-                    { "Category", "Structural" },
-                    { "Status", "Draft" }
-                }
-            )
-        };
-
-        _dataManagementService.GetItemCustomAttributesAsync(projectId, Arg.Any<IEnumerable<string>>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IEnumerable<ItemCustomAttributesResultDto>>(customAttributes));
-
-        var viewModel = CreateViewModel();
-        viewModel.CurrentProjectId = projectId;
-        viewModel.Items = items;
-
-        // Act
-        await LoadCustomAttributesAsync(viewModel);
-
-        // Assert
-        viewModel.Items[0].CustomAttributes.Should().NotBeNull();
-        viewModel.Items[0].CustomAttributes!.Should().ContainKey("Category").WhoseValue.Should().Be("Structural");
-    }
-
-    [Fact]
-    public async Task LoadProjectMetadataAsync_WithNoCachedAttributes_ClearsAvailableMetadataFields()
-    {
-        // Arrange
-        var viewModel = CreateViewModel();
-        viewModel.AvailableMetadataFields = new ObservableCollection<MetadataFieldDisplayDto>
-        {
-            new MetadataFieldDisplayDto(
-                Name: "Category",
-                Type: "string",
-                Description: null,
-                Optional: true,
-                Options: new List<MetadataOptionDisplayDto>(),
-                DefaultValue: null)
-        };
-
-        // Act
-        await viewModel.LoadProjectMetadataAsync();
-
-        // Assert
-        viewModel.AvailableMetadataFields.Should().BeEmpty();
-    }
-
-    #endregion
-
-    #region Custom Attributes Loading Tests
-
-    [Fact]
-    public async Task LoadCustomAttributesAsync_WithValidItemUrns_EnrichesItemsWithAttributes()
-    {
-        // Arrange
-        var projectId = "b.projectId123";
-        var itemUrn = "urn:adsk.bim360:dm.item:itemId:dm.version:versionId";
-        var itemUrn2 = "urn:adsk.bim360:dm.item:itemId2:dm.version:versionId2";
-
-        var items = new ObservableCollection<ItemDto>
-        {
-            new ItemDto
-            {
-                Id = "itemId",
-                Name = "File1.rvt",
-                Type = ItemType.File,
-                ItemUrn = itemUrn
-            },
-            new ItemDto
-            {
-                Id = "itemId2",
-                Name = "File2.rvt",
-                Type = ItemType.File,
-                ItemUrn = itemUrn2
-            }
-        };
-
-        var customAttributes = new[]
-        {
-            new ItemCustomAttributesResultDto(
-                Urn: itemUrn,
-                Name: "File1.rvt",
-                Title: "File1.rvt",
-                LastModifiedTime: null,
-                LastModifiedUserName: null,
-                RevisionNumber: null,
-                ApprovalStatus: null,
-                PathInProject: "Project Files/Folder/File1.rvt",
-                WebViewLink: "https://example.test/webview/1",
-                Attributes: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
-                {
-                    { "Category", "Structural" },
-                    { "Status", "Draft" }
-                }
-            ),
-            new ItemCustomAttributesResultDto(
-                Urn: itemUrn2,
-                Name: "File2.rvt",
-                Title: "File2.rvt",
-                LastModifiedTime: null,
-                LastModifiedUserName: null,
-                RevisionNumber: null,
-                ApprovalStatus: null,
-                PathInProject: "Project Files/Folder/File2.rvt",
-                WebViewLink: "https://example.test/webview/2",
-                Attributes: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
-                {
-                    { "Category", "MEP" }
-                }
-            )
-        };
-
-        _dataManagementService.GetItemCustomAttributesAsync(projectId, Arg.Any<IEnumerable<string>>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IEnumerable<ItemCustomAttributesResultDto>>(customAttributes));
-
-        var viewModel = CreateViewModel();
-        viewModel.CurrentProjectId = projectId;
-        viewModel.Items = items;
-
-        // Act
-        await LoadCustomAttributesAsync(viewModel);
-
-        // Assert
-        // Verify items were enriched with custom attributes
-        viewModel.Items[0].CustomAttributes.Should().NotBeNull();
-        viewModel.Items[0].CustomAttributes!.Should().ContainKey("Category").WhoseValue.Should().Be("Structural");
-        viewModel.Items[0].CustomAttributes!.Should().ContainKey("Status").WhoseValue.Should().Be("Draft");
-
-        viewModel.Items[1].CustomAttributes.Should().NotBeNull();
-        viewModel.Items[1].CustomAttributes!.Should().ContainKey("Category").WhoseValue.Should().Be("MEP");
-    }
-
-    [Fact]
-    public async Task LoadCustomAttributesAsync_WithNoItems_DoesNothing()
-    {
-        // Arrange
-        var projectId = "b.projectId123";
-        var viewModel = CreateViewModel();
-        viewModel.CurrentProjectId = projectId;
-        viewModel.Items = new ObservableCollection<ItemDto>();
-
-        // Act
-        await LoadCustomAttributesAsync(viewModel);
-
-        // Assert
-        await _dataManagementService.DidNotReceive()
-            .GetItemCustomAttributesAsync(Arg.Any<string>(), Arg.Any<IEnumerable<string>>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task LoadCustomAttributesAsync_WithoutProjectId_DoesNothing()
-    {
-        // Arrange
-        var items = new ObservableCollection<ItemDto>
-        {
-            new ItemDto
-            {
-                Id = "itemId",
-                Name = "File1.rvt",
-                Type = ItemType.File,
-                ItemUrn = "urn:adsk.bim360:dm.item:itemId:dm.version:versionId"
-            }
-        };
-
-        var viewModel = CreateViewModel();
-        viewModel.Items = items;
-
-        // Act
-        await LoadCustomAttributesAsync(viewModel);
-
-        // Assert
-        await _dataManagementService.DidNotReceive()
-            .GetItemCustomAttributesAsync(Arg.Any<string>(), Arg.Any<IEnumerable<string>>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task LoadCustomAttributesAsync_WithItemsWithoutUrns_FiltersThemOut()
-    {
-        // Arrange
-        var projectId = "b.projectId123";
-        var validItemUrn = "urn:adsk.bim360:dm.item:itemId:dm.version:versionId";
-
-        var items = new ObservableCollection<ItemDto>
-        {
-            new ItemDto
-            {
-                Id = "folderId",
-                Name = "Subfolder",
-                Type = ItemType.Folder,
-                ItemUrn = null // Folders don't have URNs
-            },
-            new ItemDto
-            {
-                Id = "itemId",
-                Name = "File.rvt",
-                Type = ItemType.File,
-                ItemUrn = validItemUrn
-            }
-        };
-
-        var customAttributes = new[]
-        {
-            new ItemCustomAttributesResultDto(
-                Urn: validItemUrn,
-                Name: "File.rvt",
-                Title: "File.rvt",
-                LastModifiedTime: null,
-                LastModifiedUserName: null,
-                RevisionNumber: null,
-                ApprovalStatus: null,
-                PathInProject: null,
-                WebViewLink: null,
-                Attributes: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
-                {
-                    { "Category", "Structural" }
-                }
-            )
-        };
-
-        _dataManagementService.GetItemCustomAttributesAsync(projectId, Arg.Any<IEnumerable<string>>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IEnumerable<ItemCustomAttributesResultDto>>(customAttributes));
-
-        var viewModel = CreateViewModel();
-        viewModel.CurrentProjectId = projectId;
-        viewModel.Items = items;
-
-        // Act
-        await LoadCustomAttributesAsync(viewModel);
-
-        // Assert
-        // Should only request attributes for the file, not the folder
-        await _dataManagementService.Received(1)
-            .GetItemCustomAttributesAsync(
-                projectId,
-                Arg.Is<IEnumerable<string>>(urns => urns.Count() == 1 && urns.First() == validItemUrn),
-                Arg.Any<bool>(),
-                Arg.Any<CancellationToken>());
-
-        // Verify folder still has no attributes
-        viewModel.Items[0].CustomAttributes.Should().BeNull();
-
-        // Verify file has attributes
-        viewModel.Items[1].CustomAttributes.Should().NotBeNull();
-    }
-
-    #endregion
 
     #region Selected Item Metadata Tests
 
@@ -571,8 +226,8 @@ public sealed class FilesViewModelTests
     {
         var viewModel = CreateViewModel();
 
-        StartAutoRefreshTimer(viewModel);
-        AutoRefreshTimer(viewModel).IsEnabled.Should().BeTrue();
+        ClipboardStatusTimer(viewModel).Start();
+        ClipboardStatusTimer(viewModel).IsEnabled.Should().BeTrue();
 
         viewModel.Dispose();
 
@@ -580,7 +235,6 @@ public sealed class FilesViewModelTests
         // the timer - so a running timer is never collectable and keeps firing for as long as the
         // dispatcher lives. Nothing disposed this ViewModel before: WPF does not dispose a window's
         // DataContext and the container holds it for the application's lifetime.
-        AutoRefreshTimer(viewModel).IsEnabled.Should().BeFalse();
         ClipboardStatusTimer(viewModel).IsEnabled.Should().BeFalse();
     }
 
@@ -598,7 +252,7 @@ public sealed class FilesViewModelTests
     }
 
     [Fact]
-    public void ResetForSignOut_StopsTheAutoRefreshTimerAndClearsProjectState()
+    public void ResetForSignOut_StopsClipboardTimerAndClearsProjectState()
     {
         var viewModel = CreateViewModel();
 
@@ -611,14 +265,14 @@ public sealed class FilesViewModelTests
         viewModel.AvailableMetadataFields.Add(
             new MetadataFieldDisplayDto("Status", "string", null, true, [], null, 301));
 
-        StartAutoRefreshTimer(viewModel);
+        ClipboardStatusTimer(viewModel).Start();
 
         viewModel.ResetForSignOut();
 
         // Logout used to clear Items only, which left the five-minute auto-refresh running against a
         // project the application no longer had a token for - producing a failed load and an error
         // banner minutes after the user signed out.
-        AutoRefreshTimer(viewModel).IsEnabled.Should().BeFalse();
+        ClipboardStatusTimer(viewModel).IsEnabled.Should().BeFalse();
         viewModel.Items.Should().BeEmpty();
         viewModel.AvailableMetadataFields.Should().BeEmpty();
         viewModel.CurrentProjectId.Should().BeNull();
@@ -834,124 +488,9 @@ public sealed class FilesViewModelTests
 
     #endregion
 
-    #region Refresh
-
-    [Fact]
-    public async Task RefreshCommand_DropsTheProjectCacheFirst()
-    {
-        var viewModel = CreateViewModel();
-        viewModel.CurrentHubId = "hub1";
-        viewModel.CurrentProjectId = "b.project1";
-
-        _dataManagementService
-            .GetRootFolderAsync("hub1", "b.project1", "token", Arg.Any<CancellationToken>())
-            .Returns(new FolderDto { Id = "root", Name = "Project Files" });
-
-        await viewModel.RefreshCommand.ExecuteAsync(null);
-
-        // Caching the project's schema and its files' paths is what removed the repeated APS
-        // traffic; without this an explicit Refresh would re-read the cache and look broken when a
-        // change made in ACC's web UI failed to appear.
-        _dataManagementService.Received(1).InvalidateProjectCache("b.project1");
-        _cdeStructureUseCase.Received(1).Invalidate("b.project1");
-    }
-
-    [Fact]
-    public async Task LoadFolderItemsAsync_UsesTheTokenFromTheTokenProvider()
-    {
-        var viewModel = CreateViewModel();
-        viewModel.CurrentHubId = "hub1";
-        viewModel.CurrentProjectId = "b.project1";
-        _dataManagementService
-            .GetRootFolderAsync("hub1", "b.project1", Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(new FolderDto { Id = "root", Name = "Project Files" });
-
-        await viewModel.LoadFolderItemsAsync();
-
-        // The ViewModel holds no token of its own; the one passed down is whatever the provider
-        // returned for this call.
-        await _dataManagementService.Received(1).GetRootFolderAsync(
-            "hub1", "b.project1", "token", Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public void AutoRefreshTick_WhilePaused_IssuesNoApsRequests()
-    {
-        var viewModel = CreateViewModel();
-        viewModel.CurrentHubId = "hub1";
-        viewModel.CurrentProjectId = "b.project1";
-
-        viewModel.SetAutoRefreshPaused(true);
-        InvokeAutoRefreshTick(viewModel);
-
-        _dataManagementService.DidNotReceive().GetRootFolderAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public void SetAutoRefreshPaused_ResumingAfterASkippedTick_RefreshesOnce()
-    {
-        var viewModel = CreateViewModel();
-        viewModel.CurrentHubId = "hub1";
-        viewModel.CurrentProjectId = "b.project1";
-        _dataManagementService
-            .GetRootFolderAsync("hub1", "b.project1", Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(new FolderDto { Id = "root", Name = "Project Files" });
-
-        viewModel.SetAutoRefreshPaused(true);
-        InvokeAutoRefreshTick(viewModel);
-        InvokeAutoRefreshTick(viewModel);
-        viewModel.SetAutoRefreshPaused(false);
-
-        // Two skipped ticks still mean one catch-up load, not two.
-        _dataManagementService.Received(1).GetRootFolderAsync(
-            "hub1", "b.project1", Arg.Any<string>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public void SetAutoRefreshPaused_ResumingWithNoSkippedTick_DoesNotRefresh()
-    {
-        var viewModel = CreateViewModel();
-        viewModel.CurrentHubId = "hub1";
-        viewModel.CurrentProjectId = "b.project1";
-
-        viewModel.SetAutoRefreshPaused(true);
-        viewModel.SetAutoRefreshPaused(false);
-
-        _dataManagementService.DidNotReceive().GetRootFolderAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-    }
-
-    #endregion
-
     #region Test helpers
-
-    private static DigitalMIDP.Application.Interfaces.ITokenProvider TokenProvider()
-    {
-        var provider = Substitute.For<DigitalMIDP.Application.Interfaces.ITokenProvider>();
-        provider.GetAccessTokenAsync(Arg.Any<CancellationToken>()).Returns("token");
-        return provider;
-    }
-
-    private static System.Windows.Threading.DispatcherTimer AutoRefreshTimer(FilesViewModel viewModel) =>
-        Field<System.Windows.Threading.DispatcherTimer>(viewModel, "_autoRefreshTimer");
-
     private static System.Windows.Threading.DispatcherTimer ClipboardStatusTimer(FilesViewModel viewModel) =>
         Field<System.Windows.Threading.DispatcherTimer>(viewModel, "_clipboardStatusTimer");
-
-    /// <summary>
-    /// Starts the auto-refresh timer the way a completed load does. Reached by reflection because
-    /// the timers are private implementation details - what is being asserted is that disposal and
-    /// sign-out stop them, which is not otherwise observable.
-    /// </summary>
-    private static void StartAutoRefreshTimer(FilesViewModel viewModel) =>
-        AutoRefreshTimer(viewModel).Start();
-
-    /// <summary>Raises one auto-refresh tick without waiting out the five-minute interval.</summary>
-    private static void InvokeAutoRefreshTick(FilesViewModel viewModel) =>
-        typeof(FilesViewModel)
-            .GetMethod("AutoRefreshTimerTick", BindingFlags.NonPublic | BindingFlags.Instance)!
-            .Invoke(viewModel, [null, EventArgs.Empty]);
 
     /// <summary>
     /// Sets IsLoading, whose setter is private (the property is driven by LoadFolderItemsAsync).

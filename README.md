@@ -1,6 +1,6 @@
 ﻿# <p align="left"> <img height="48" alt="DigitalMIDP Logo" src="DigitalMIDP/Assets/Icons/icon.png" /> <strong style="font-size: 2em;">DigitalMIDP</strong> </p>
 
-DigitalMIDP is a WPF desktop application that provides a digital files register, complete with custom attributes for Autodesk Forma based project. It uses Autodesk Platform Services (APS) APIs to display, list and allow direct local access to Autodesk Forma Files.
+DigitalMIDP is a WPF desktop file register for Autodesk Forma projects. A designated Manifest Runner reads project inventory from Autodesk Platform Services (APS) and publishes a catalog in ACC. Reader clients display the Desktop Connector copy; sign-in, project discovery and attribute saves still use APS.
 
 <p align="center">
   <img
@@ -24,8 +24,7 @@ DigitalMIDP is a WPF desktop application that provides a digital files register,
 - Custom metadata display and editing
 - Deliverable creation from a template, with document numbers allocated against the project naming
   standard
-- Automatic retry with backoff for transient APS failures, and short-lived caching of project
-  configuration so a refresh does not re-request data that has not changed
+- Local grid refresh and automatic updates when a new manifest revision syncs
 - WPF MVVM architecture
 - .NET 8 dependency injection
 - Desktop Connector integration
@@ -33,11 +32,14 @@ DigitalMIDP is a WPF desktop application that provides a digital files register,
 
 ## Quick Start
 
-See [Development.md](./docs/DEVELOPMENT.md)
+For deployment, install the default MSI client on readers and opt in to **Manifest Runner** on one operator machine. [Seed every project before rolling out its clients](./DigitalMIDP.ManifestRunner/README.md). Without a synced, locally readable manifest the grid cannot load a new catalog; it does not fall back to a live APS scan.
+
+For a source build, see the [development guide](./docs/DEVELOPMENT.md).
 
 ## Documentation
 
 - [Architecture](./ARCHITECTURE.md)
+- [Reader guide](./docs/USER-GUIDE.md) · [Configuration](./docs/CONFIGURATION.md) · [MSI selection and smoke checklist](./DigitalMIDP.Installer/README.md)
 - [Coding Standards](./docs/CODING-STANDARDS.md)
 - [Development Guide](./docs/DEVELOPMENT.md)
 - [Roadmap](./ROADMAP.md)

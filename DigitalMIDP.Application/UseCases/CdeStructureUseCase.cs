@@ -15,8 +15,7 @@ public sealed class CdeStructureUseCase : ICdeStructureUseCase
     /// singular is at least as common in practice, so both are accepted rather than failing on a
     /// folder the user can plainly see.
     /// </summary>
-    private static readonly string[] TemplateFolderNames =
-        ["templates", "template", "projecttemplates", "projecttemplate"];
+    private static readonly string[] TemplateFolderNames = FolderNameMatcher.TemplateFolderNames;
 
     /// <summary>
     /// How long a resolved structure stays usable. Resolving costs roughly seven API round trips

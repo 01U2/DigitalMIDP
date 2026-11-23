@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.14.37628.2 d17.14
+VisualStudioVersion = 17.14.37628.2
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DigitalMIDP", "DigitalMIDP\DigitalMIDP.csproj", "{3F0659CC-AA6C-4BF9-B042-CB196B889888}"
 EndProject
@@ -14,6 +14,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DigitalMIDP.Tests", "DigitalMIDP.Tests\DigitalMIDP.Tests.csproj", "{DB2A848A-47DF-1ED2-32E5-3EBC5725C105}"
 EndProject
 Project("{B7DD6F7E-DEF8-4E67-B5B7-07EF123DB6F0}") = "DigitalMIDP.Installer", "DigitalMIDP.Installer\DigitalMIDP.Installer.wixproj", "{991472F8-3CF3-4F27-AAE9-B93C88242EB8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DigitalMIDP.ManifestRunner", "DigitalMIDP.ManifestRunner\DigitalMIDP.ManifestRunner.csproj", "{C8B58AAB-432A-4534-B661-64E60904B231}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -123,6 +125,22 @@ Global
 		{991472F8-3CF3-4F27-AAE9-B93C88242EB8}.Release|x64.Build.0 = Release|x64
 		{991472F8-3CF3-4F27-AAE9-B93C88242EB8}.Release|x86.ActiveCfg = Release|x86
 		{991472F8-3CF3-4F27-AAE9-B93C88242EB8}.Release|x86.Build.0 = Release|x86
+		{C8B58AAB-432A-4534-B661-64E60904B231}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C8B58AAB-432A-4534-B661-64E60904B231}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C8B58AAB-432A-4534-B661-64E60904B231}.Debug|ARM64.ActiveCfg = Debug|Any CPU
+		{C8B58AAB-432A-4534-B661-64E60904B231}.Debug|ARM64.Build.0 = Debug|Any CPU
+		{C8B58AAB-432A-4534-B661-64E60904B231}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C8B58AAB-432A-4534-B661-64E60904B231}.Debug|x64.Build.0 = Debug|Any CPU
+		{C8B58AAB-432A-4534-B661-64E60904B231}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{C8B58AAB-432A-4534-B661-64E60904B231}.Debug|x86.Build.0 = Debug|Any CPU
+		{C8B58AAB-432A-4534-B661-64E60904B231}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C8B58AAB-432A-4534-B661-64E60904B231}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C8B58AAB-432A-4534-B661-64E60904B231}.Release|ARM64.ActiveCfg = Release|Any CPU
+		{C8B58AAB-432A-4534-B661-64E60904B231}.Release|ARM64.Build.0 = Release|Any CPU
+		{C8B58AAB-432A-4534-B661-64E60904B231}.Release|x64.ActiveCfg = Release|Any CPU
+		{C8B58AAB-432A-4534-B661-64E60904B231}.Release|x64.Build.0 = Release|Any CPU
+		{C8B58AAB-432A-4534-B661-64E60904B231}.Release|x86.ActiveCfg = Release|Any CPU
+		{C8B58AAB-432A-4534-B661-64E60904B231}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

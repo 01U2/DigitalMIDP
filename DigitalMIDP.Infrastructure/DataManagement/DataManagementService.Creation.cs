@@ -252,7 +252,12 @@ internal sealed partial class DataManagementService
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(itemId);
 
-        var storageUrn = await GetTipVersionStorageUrnAsync(projectId, itemId, cancellationToken);
+        return await DownloadTipAsync(projectId, itemId, null, cancellationToken);
+    }
+
+    internal async Task<byte[]> DownloadTipAsync(string projectId, string itemId, string? expectedTip, CancellationToken cancellationToken)
+    {
+        var storageUrn = await GetTipVersionStorageUrnAsync(projectId, itemId, expectedTip, cancellationToken);
         var (bucketKey, objectKey) = ParseStorageUrn(storageUrn);
 
         // Ask OSS for a pre-signed download URL rather than streaming through the API - this is the
@@ -403,6 +408,7 @@ internal sealed partial class DataManagementService
     private async Task<string> GetTipVersionStorageUrnAsync(
         string projectId,
         string itemId,
+        string? expectedTip,
         CancellationToken cancellationToken)
     {
         var url = $"{DataApiBaseUrl}/projects/{projectId}/items/{Uri.EscapeDataString(itemId)}/tip";
@@ -418,6 +424,8 @@ internal sealed partial class DataManagementService
         }
 
         using var document = JsonDocument.Parse(json);
+        if (expectedTip != null && document.RootElement.GetProperty("data").GetProperty("id").GetString() != expectedTip)
+            throw new InvalidDataException("Manifest tip changed during discovery.");
         var storageUrn = document.RootElement
             .TryGetPath("data", "relationships", "storage", "data", "id")?
             .GetString();

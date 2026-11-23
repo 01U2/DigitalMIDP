@@ -15,6 +15,7 @@ public sealed partial class ProjectSelectionViewModel : ObservableObject
     private readonly IFileListingUseCase _fileListingUseCase;
     private readonly ITokenProvider _tokenProvider;
     private readonly ILogger<ProjectSelectionViewModel> _logger;
+    private int _generation;
 
     [ObservableProperty]
     private List<ProjectDto> projects = [];
@@ -59,6 +60,8 @@ public sealed partial class ProjectSelectionViewModel : ObservableObject
 
         IsLoading = true;
         ErrorMessage = null;
+        var generation = ++_generation;
+        var hubId = CurrentHubId;
 
         try
         {
@@ -66,19 +69,22 @@ public sealed partial class ProjectSelectionViewModel : ObservableObject
 
             // Fetched per call, never stored on the ViewModel - see TokenExposureTests.
             var accessToken = await _tokenProvider.GetAccessTokenAsync(CancellationToken.None);
-            var response = await _fileListingUseCase.GetProjectsAsync(CurrentHubId!, accessToken, CancellationToken.None);
+            if (generation != _generation) return;
+            var response = await _fileListingUseCase.GetProjectsAsync(hubId!, accessToken, CancellationToken.None);
+            if (generation != _generation) return;
             Projects = new List<ProjectDto>(response.Projects);
 
             _logger.LogInformation("Loaded {ProjectCount} projects", Projects.Count);
         }
         catch (Exception ex)
         {
+            if (generation != _generation) return;
             _logger.LogError(ex, "Failed to load projects for hub {HubId}", CurrentHubId);
             ErrorMessage = $"Failed to load projects: {ex.Message}";
         }
         finally
         {
-            IsLoading = false;
+            if (generation == _generation) IsLoading = false;
         }
     }
 
@@ -88,8 +94,11 @@ public sealed partial class ProjectSelectionViewModel : ObservableObject
     [RelayCommand]
     public void ClearSelection()
     {
+        ++_generation;
+        IsLoading = false;
+        CurrentHubId = null;
         SelectedProject = null;
-        Projects.Clear();
+        Projects = [];
         ErrorMessage = null;
     }
 }

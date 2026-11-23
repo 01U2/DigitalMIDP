@@ -1,4 +1,5 @@
 ﻿using DigitalMIDP.Application.Interfaces;
+using DigitalMIDP.Application.Manifests;
 using DigitalMIDP.Application.UseCases;
 using DigitalMIDP.Infrastructure.Authentication;
 using DigitalMIDP.Infrastructure.Caching;
@@ -6,8 +7,11 @@ using DigitalMIDP.Infrastructure.Configuration;
 using DigitalMIDP.Infrastructure.DataManagement;
 using DigitalMIDP.Infrastructure.DesktopConnector;
 using DigitalMIDP.Infrastructure.Http;
+using DigitalMIDP.Infrastructure.Manifests;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 
 namespace DigitalMIDP.Infrastructure;
 
@@ -94,17 +98,47 @@ public static class ServiceCollectionExtensions
         // therefore re-enters authorization and picks up a refreshed token if one fell due between
         // attempts. Reversed, a retry would keep re-presenting the token the first attempt used.
         services.AddHttpClient<IDataManagementService, DataManagementService>()
+            .AddTypedClient<DataManagementService>()
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
             .AddHttpMessageHandler<ApsResilienceHandler>()
             .AddHttpMessageHandler<ApsAuthorizationHandler>()
+            .AddHttpMessageHandler<ManifestRequestCounter.Handler>()
             .ConfigureHttpClient(client =>
             {
                 client.DefaultRequestHeaders.Add(UserAgentHeaderName, UserAgentValue);
             });
 
+        services.AddHttpClient<IProjectInventoryReconciler, ApsInventoryReconciler>(client =>
+                client.DefaultRequestHeaders.Add(UserAgentHeaderName, UserAgentValue))
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
+            .AddHttpMessageHandler<ApsResilienceHandler>()
+            .AddHttpMessageHandler<ApsAuthorizationHandler>()
+            .AddHttpMessageHandler<ManifestRequestCounter.Handler>();
+
+        services.AddHttpClient<IManifestPublisher, ApsManifestPublisher>(client =>
+                client.DefaultRequestHeaders.Add(UserAgentHeaderName, UserAgentValue))
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
+            .AddHttpMessageHandler<ApsResilienceHandler>()
+            .AddHttpMessageHandler<ApsAuthorizationHandler>()
+            .AddHttpMessageHandler<ManifestRequestCounter.Handler>();
+
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton(_ => ManifestEnrollmentStore.ForOperator());
+        services.AddSingleton<IManifestRunner>(sp => new ManifestRunner(
+            sp.GetRequiredService<ManifestEnrollmentStore>(), sp.GetRequiredService<TimeProvider>(),
+            async (hubId, projectId, ct) =>
+            {
+                using var scope = sp.CreateScope();
+                return await scope.ServiceProvider.GetRequiredService<IManifestPublisher>()
+                    .CheckAsync(hubId, projectId, ct).ConfigureAwait(false);
+            }, sp.GetRequiredService<ILogger<ManifestRunner>>()));
+
         // Pre-signed S3 transfers deliberately have NO authorization handler. The signature travels
         // in the URL, and S3 rejects a request that also presents an APS bearer token, so uploads
         // and downloads cannot share the authenticated client above.
         services.AddHttpClient(DataManagementService.TransferHttpClientName)
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
+            .AddHttpMessageHandler<ManifestRequestCounter.Handler>()
             .ConfigureHttpClient(client =>
             {
                 client.DefaultRequestHeaders.Add(UserAgentHeaderName, UserAgentValue);
@@ -114,10 +148,15 @@ public static class ServiceCollectionExtensions
 
         // Register message handlers as Transient (required for HttpClient pipeline)
         services.AddTransient<ApsAuthorizationHandler>();
+        services.AddTransient<ManifestRequestCounter.Handler>();
         services.AddTransient<ApsResilienceHandler>();
 
         // Add Desktop Connector service
-        services.AddSingleton<IDesktopConnectorService, DesktopConnectorService>();
+        var configuredRoot = configuration["DesktopConnector:SyncRootPath"];
+        var syncRoot = string.IsNullOrWhiteSpace(configuredRoot) ? DesktopConnectorService.DefaultSyncRoot : configuredRoot;
+        services.AddSingleton<IDesktopConnectorService>(sp => new DesktopConnectorService(
+            sp.GetRequiredService<ILogger<DesktopConnectorService>>(), syncRoot));
+        services.AddSingleton<ILocalManifestReader>(_ => new LocalManifestReader(syncRoot));
 
         // Add Desktop Connector use cases
         services.AddScoped<IOpenFileLocallyUseCase, OpenFileLocallyUseCase>();

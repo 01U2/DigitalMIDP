@@ -129,9 +129,10 @@ public sealed class EditCustomAttributesViewModelTests
     [Fact]
     public async Task SaveAsync_WithRequiredFieldLeftBlank_SetsErrorMessage()
     {
-        var item = MakeItem("item1", "File.rvt");
+        var item = MakeItem("item1", "File.rvt", customAttributes: new Dictionary<string, string?> { ["Category"] = "Original" });
         var fields = new List<MetadataFieldDisplayDto> { TextField(101, "Category", optional: false) };
         _viewModel.Initialize("b.project1", new[] { item }, fields);
+        _viewModel.Fields[0].Value = null;
 
         await _viewModel.SaveCommand.ExecuteAsync(null);
 
@@ -195,7 +196,7 @@ public sealed class EditCustomAttributesViewModelTests
 
         _dataManagementService.UpdateItemCustomAttributesAsync(
                 "b.project1", "urn:version:1", Arg.Any<IReadOnlyCollection<CustomAttributeUpdateRequestDto>>(), Arg.Any<CancellationToken>())
-            .Returns(new List<CustomAttributeUpdateResultDto>());
+            .Returns(new List<CustomAttributeUpdateResultDto> { new(101, "Category", "string", "MEP") });
 
         IReadOnlyDictionary<string, IReadOnlyDictionary<string, string?>>? raisedPayload = null;
         _viewModel.AttributesUpdated += payload => raisedPayload = payload;
@@ -227,7 +228,7 @@ public sealed class EditCustomAttributesViewModelTests
 
         _dataManagementService.UpdateItemCustomAttributesAsync(
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyCollection<CustomAttributeUpdateRequestDto>>(), Arg.Any<CancellationToken>())
-            .Returns(new List<CustomAttributeUpdateResultDto>());
+            .Returns(new List<CustomAttributeUpdateResultDto> { new(101, "Category", "string", "MEP") });
 
         await _viewModel.SaveCommand.ExecuteAsync(null);
 
@@ -250,7 +251,7 @@ public sealed class EditCustomAttributesViewModelTests
 
         _dataManagementService.UpdateItemCustomAttributesAsync(
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyCollection<CustomAttributeUpdateRequestDto>>(), Arg.Any<CancellationToken>())
-            .Returns(new List<CustomAttributeUpdateResultDto>());
+            .Returns(new List<CustomAttributeUpdateResultDto> { new(101, "Category", "string", "MEP") });
 
         await _viewModel.SaveCommand.ExecuteAsync(null);
 
@@ -263,6 +264,45 @@ public sealed class EditCustomAttributesViewModelTests
     #endregion
 
     #region SaveAsync Error Path Tests
+
+    [Fact]
+    public async Task BulkSaveUsesFolderIdsAndPublishesOnlyConfirmedChanges()
+    {
+        AttributeEditTarget Target(int id, string type) => new(MakeItem(id.ToString(), "drawing", "v" + id),
+            [TextField(id, "Description"), TextField(id + 1, "Title"), TextField(id + 2, "Local") with { Type = type }],
+            new Dictionary<int, string?>());
+        _viewModel.Initialize("p", [Target(1, "string"), Target(10, "date")], () => true);
+        Assert.Equal(new[] { "Description", "Title" }, _viewModel.Fields.Select(f => f.Name));
+        Assert.Empty(_dataManagementService.ReceivedCalls());
+        foreach (var field in _viewModel.Fields) field.Value = field.Name;
+        _dataManagementService.UpdateItemCustomAttributesAsync("p", Arg.Any<string>(),
+            Arg.Any<IReadOnlyCollection<CustomAttributeUpdateRequestDto>>(), Arg.Any<CancellationToken>())
+            .Returns(c => new List<CustomAttributeUpdateResultDto> { new(c.ArgAt<string>(1) == "v1" ? 1 : 10, null, null, "Description") });
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string?>>? payload = null;
+        _viewModel.AttributesUpdated += p => payload = p;
+        await _viewModel.SaveCommand.ExecuteAsync(null);
+        Assert.False(_viewModel.SaveSucceeded);
+        Assert.Contains("Not confirmed: Title", _viewModel.ErrorMessage);
+        Assert.Equal(2, payload!.Count);
+        Assert.All(payload.Values, v => Assert.Equal("Description", Assert.Single(v).Key));
+    }
+
+    [Theory]
+    [InlineData("empty")]
+    [InlineData("wrongValue")]
+    [InlineData("duplicate")]
+    public async Task UnconfirmedFieldsNeverPublish(string response)
+    {
+        _viewModel.Initialize("p", [MakeItem("1", "file")], [TextField(1, "Description")]);
+        _viewModel.Fields[0].Value = "new";
+        var result = new CustomAttributeUpdateResultDto(1, null, null, response == "wrongValue" ? "old" : "new");
+        IReadOnlyList<CustomAttributeUpdateResultDto> confirmations = response switch { "empty" => [], "duplicate" => [result, result], _ => [result] };
+        _dataManagementService.UpdateItemCustomAttributesAsync("p", Arg.Any<string>(), Arg.Any<IReadOnlyCollection<CustomAttributeUpdateRequestDto>>(), Arg.Any<CancellationToken>()).Returns(confirmations);
+        _viewModel.AttributesUpdated += _ => throw new InvalidOperationException("Unexpected confirmation");
+        await _viewModel.SaveCommand.ExecuteAsync(null);
+        Assert.False(_viewModel.SaveSucceeded);
+        Assert.Contains("Not confirmed", _viewModel.ErrorMessage);
+    }
 
     [Fact]
     public async Task SaveAsync_WithNoFileSelected_SetsErrorMessage()
@@ -362,7 +402,7 @@ public sealed class EditCustomAttributesViewModelTests
     }
 
     [Fact]
-    public async Task SaveAsync_MultiFile_PartialFailure_ReportsBothCountsAndKeepsSaveSucceeded()
+    public async Task SaveAsync_MultiFile_PartialFailure_ReportsBothCountsWithoutSuccess()
     {
         var item1 = MakeItem("item1", "File1.rvt");
         var item2 = MakeItem("item2", "File2.rvt", tipVersionUrn: null); // will fail
@@ -372,13 +412,13 @@ public sealed class EditCustomAttributesViewModelTests
 
         _dataManagementService.UpdateItemCustomAttributesAsync(
                 "b.project1", "urn:version:1", Arg.Any<IReadOnlyCollection<CustomAttributeUpdateRequestDto>>(), Arg.Any<CancellationToken>())
-            .Returns(new List<CustomAttributeUpdateResultDto>());
+            .Returns(new List<CustomAttributeUpdateResultDto> { new(101, "Category", "string", "MEP") });
 
         await _viewModel.SaveCommand.ExecuteAsync(null);
 
         _viewModel.ErrorMessage.Should().Contain("Updated 1 of 2 files");
         _viewModel.ErrorMessage.Should().Contain("File2.rvt");
-        _viewModel.SaveSucceeded.Should().BeTrue(); // at least one succeeded
+        _viewModel.SaveSucceeded.Should().BeFalse();
     }
 
     [Fact]
@@ -398,4 +438,13 @@ public sealed class EditCustomAttributesViewModelTests
     }
 
     #endregion
+}
+
+internal static class EditTestTargets
+{
+    public static void Initialize(this EditCustomAttributesViewModel editor, string project,
+        IReadOnlyList<ItemDto> items, IReadOnlyList<MetadataFieldDisplayDto> fields) =>
+        editor.Initialize(project, items.Select(i => new AttributeEditTarget(i, fields,
+            fields.Where(f => i.CustomAttributes?.ContainsKey(f.Name) == true)
+                .ToDictionary(f => f.AttributeId, f => i.CustomAttributes![f.Name]))).ToArray(), () => true);
 }

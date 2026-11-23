@@ -8,7 +8,9 @@ DigitalMIDP targets Windows desktop runtimes (`net8.0-windows`).
 
 - **Operating System**: Windows 10 (Build 19041+) or Windows 11.
 - **Runtime**: [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) (if deploying framework-dependent).
-- **Autodesk Desktop Connector**: Recommended (version 16.x or newer) for local file opening and sync features.
+- **Autodesk Desktop Connector**: Reader machines need a synced, locally readable project manifest for the file grid.
+
+For the per-user x64 MSI, install the x64 .NET 8 Desktop Runtime. Install the default client on reader machines and select the optional Manifest Runner on the designated operator machine. Follow the [operator guide](../DigitalMIDP.ManifestRunner/README.md) to seed **each** project before client rollout. Run the [installer lifecycle checklist](../DigitalMIDP.Installer/README.md) on a disposable machine before release.
 
 ---
 

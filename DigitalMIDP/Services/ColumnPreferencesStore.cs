@@ -27,18 +27,20 @@ public sealed class ColumnPreferencesStore
 {
     private const string FileName = "column-preferences.json";
 
-    private static readonly string FilePath = Path.Combine(
+    private readonly string FilePath;
+    public ColumnPreferencesStore(ILogger<ColumnPreferencesStore> logger) : this(logger, Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         AppConstants.AppName,
-        FileName);
+        FileName)) { }
 
     private readonly ILogger<ColumnPreferencesStore> _logger;
     private Dictionary<string, ProjectColumnPreferences>? _cache;
 
-    public ColumnPreferencesStore(ILogger<ColumnPreferencesStore> logger)
+    internal ColumnPreferencesStore(ILogger<ColumnPreferencesStore> logger, string filePath)
     {
         ArgumentNullException.ThrowIfNull(logger);
         _logger = logger;
+        FilePath = filePath;
     }
 
     /// <summary>Loads the saved column selection for one project, or null when none has been saved yet.</summary>

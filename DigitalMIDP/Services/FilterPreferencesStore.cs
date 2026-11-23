@@ -29,18 +29,20 @@ public sealed class FilterPreferencesStore
 {
     private const string FileName = "filter-preferences.json";
 
-    private static readonly string FilePath = Path.Combine(
+    private readonly string FilePath;
+    public FilterPreferencesStore(ILogger<FilterPreferencesStore> logger) : this(logger, Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         AppConstants.AppName,
-        FileName);
+        FileName)) { }
 
     private readonly ILogger<FilterPreferencesStore> _logger;
     private Dictionary<string, ProjectFilterPreferences>? _cache;
 
-    public FilterPreferencesStore(ILogger<FilterPreferencesStore> logger)
+    internal FilterPreferencesStore(ILogger<FilterPreferencesStore> logger, string filePath)
     {
         ArgumentNullException.ThrowIfNull(logger);
         _logger = logger;
+        FilePath = filePath;
     }
 
     /// <summary>Loads the saved preferences for one project, or null when none have been saved yet.</summary>

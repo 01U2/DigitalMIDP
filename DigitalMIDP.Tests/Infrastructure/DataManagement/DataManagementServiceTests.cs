@@ -763,6 +763,30 @@ public sealed class DataManagementServiceTests : IDisposable
 
     #region UpdateItemCustomAttributesAsync Tests
 
+    [Theory]
+    [InlineData("current")]
+    [InlineData("stale tip")]
+    [InlineData("moved")]
+    [InlineData("changed options")]
+    [InlineData("absent not null")]
+    public async Task EditPreflightChecksRemoteScopeSchemaAndBaseline(string scenario)
+    {
+        var item = new ItemDto { Id = "i", ItemUrn = "i", Name = "file", Type = ItemType.File, ParentId = "f", TipVersionUrn = "v" };
+        var target = new AttributeEditTarget(item, [new("Status", "array", null, true, [new("Draft", null)], null, 5)], new Dictionary<int, string?> { [5] = null });
+        _handlerMock.OnRequest = r => r.RequestUri!.AbsolutePath switch
+        {
+            "/data/v1/projects/b.p/items/i" => CreateJsonResponse(new { data = new { type = "items", id = "i", relationships = new {
+                parent = new { data = new { id = scenario == "moved" ? "other" : "f" } }, tip = new { data = new { id = scenario == "stale tip" ? "new" : "v" } } } } }),
+            "/bim360/docs/v1/projects/p/custom-attribute-definitions" => CreateJsonResponse(new[] { new { id = 5, name = "Status", type = "array", arrayValues = new[] { scenario == "changed options" ? "Final" : "Draft" } } }),
+            "/bim360/docs/v1/projects/p/folders/f/custom-attribute-definitions" => CreateJsonResponse(Array.Empty<object>()),
+            "/bim360/docs/v1/projects/p/versions:batch-get" => CreateJsonResponse(new { results = new[] { new { itemUrn = "i", urn = "v", customAttributes = scenario == "absent not null" ? Array.Empty<object>() : new object[] { new { id = 5, value = (string?)null } } } } }),
+            _ => throw new InvalidOperationException("Unexpected request: " + r.RequestUri)
+        };
+        var error = await Record.ExceptionAsync(() => CreateService().ValidateAttributeEditAsync("b.p", target, [new(5, "Draft")]));
+        if (scenario == "current") Assert.Null(error);
+        else Assert.IsType<InvalidOperationException>(error);
+    }
+
     [Fact]
     public async Task UpdateItemCustomAttributesAsync_WithValidUpdates_ReturnsMappedResults()
     {

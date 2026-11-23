@@ -1,0 +1,49 @@
+<Window x:Class="DigitalMIDP.ManifestRunner.RunnerWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="DigitalMIDP Manifest Runner" Width="1140" Height="550" MinWidth="640" MinHeight="440" Closing="OnClosing">
+    <Window.Resources>
+        <Style TargetType="Button"><Setter Property="Padding" Value="10,4"/><Setter Property="Margin" Value="0,3,6,3"/></Style>
+        <Style TargetType="ComboBox"><Setter Property="MinWidth" Value="150"/><Setter Property="MaxWidth" Value="300"/><Setter Property="Margin" Value="4"/></Style>
+    </Window.Resources>
+    <DockPanel Margin="14">
+        <StackPanel DockPanel.Dock="Top">
+            <WrapPanel>
+                <Button Content="Sign in" Command="{Binding SignIn}" />
+                <Button Content="Sign out" Command="{Binding SignOut}" />
+                <TextBlock VerticalAlignment="Center" Text="Signed in" Margin="10,0,3,0" />
+                <CheckBox IsChecked="{Binding SignedIn, Mode=OneWay}" IsEnabled="False" VerticalAlignment="Center" />
+            </WrapPanel>
+            <WrapPanel>
+                <TextBlock Text="Hub" VerticalAlignment="Center"/><ComboBox ItemsSource="{Binding Hubs}" DisplayMemberPath="Name" SelectedItem="{Binding Hub}" />
+                <Button Content="Refresh hubs" Command="{Binding LoadHubs}" />
+                <Button Content="Load projects" Command="{Binding LoadProjects}" />
+                <TextBlock Text="Project" VerticalAlignment="Center"/><ComboBox ItemsSource="{Binding Projects}" DisplayMemberPath="Name" SelectedItem="{Binding Project}" />
+            </WrapPanel>
+            <WrapPanel>
+                <TextBlock Text="Interval (minutes)" VerticalAlignment="Center"/><TextBox Text="{Binding IntervalMinutes, UpdateSourceTrigger=PropertyChanged}" Width="60" Margin="4" />
+                <Button Content="Enroll project" Command="{Binding Enroll}" />
+            </WrapPanel>
+            <TextBlock Text="Enrolled projects" FontWeight="SemiBold" Margin="0,12,0,0" />
+            <WrapPanel>
+                <Button Content="Check now" Command="{Binding CheckNow}" />
+                <Button Content="Apply interval to selected" Command="{Binding ChangeInterval}" />
+                <Button Content="Remove selected" Command="{Binding Remove}" />
+            </WrapPanel>
+        </StackPanel>
+        <TextBlock DockPanel.Dock="Bottom" Text="{Binding Message}" TextWrapping="Wrap" Margin="0,8,0,0" />
+        <DataGrid ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" CanUserAddRows="False">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Hub ID" Binding="{Binding HubId}" Width="110" />
+                <DataGridTextColumn Header="Project ID" Binding="{Binding ProjectId}" Width="130" />
+                <DataGridTextColumn Header="Interval" Binding="{Binding Interval}" />
+                <DataGridCheckBoxColumn Header="Checking" Binding="{Binding IsChecking, Mode=OneWay}" />
+                <DataGridTextColumn Header="Last attempt (UTC)" Binding="{Binding LastAttemptUtc}" />
+                <DataGridTextColumn Header="Next check (UTC)" Binding="{Binding NextCheckUtc}" />
+                <DataGridTextColumn Header="Last success (UTC)" Binding="{Binding LastSuccess.CheckedAtUtc}" />
+                <DataGridTextColumn Header="Published (UTC)" Binding="{Binding LastSuccess.LastPublicationUtc}" />
+                <DataGridTextColumn Header="Changed" Binding="{Binding LastSuccess.Changed}" />
+                <DataGridTextColumn Header="HTTP requests" Binding="{Binding LastSuccess.HttpRequestCount}" />
+                <DataGridTextColumn Header="Last error" Binding="{Binding LastError}" />
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</Window>

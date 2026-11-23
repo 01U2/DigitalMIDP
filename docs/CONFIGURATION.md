@@ -1,63 +1,39 @@
 ﻿# Configuration Guide - DigitalMIDP
 
-DigitalMIDP uses `Microsoft.Extensions.Configuration` to manage application settings and environment overrides.
+The client and runner load JSON configuration at startup. Restart the affected application after changing it.
 
 ---
 
 ## 1. Configuration Sources
 
-Settings are loaded in the following precedence order:
-1. Environment variables
-2. User Secrets (`dotnet user-secrets`) - Development only
-3. `DigitalMIDP/appsettings.json` - Default file
+From lowest to highest precedence: `appsettings.json` beside the executable, `%ProgramData%\DigitalMIDP\autodesk.json`, then `%LocalAppData%\DigitalMIDP\autodesk.json`. Neither environment variables nor user secrets are configuration sources for this setup.
 
 ---
 
 ## 2. Configuration Schema (`appsettings.json`)
 
-The primary configuration section is `Autodesk` / `ApsAuthentication`:
+The shipped authentication defaults are:
 
 ```json
 {
   "Autodesk": {
     "ClientId": "",
     "RedirectUri": "http://localhost:8080/callback/",
-    "Scopes": "data:read data:write data:create bucket:create bucket:read",
+    "Scopes": "data:read data:write account:read data:create",
     "AuthorizeEndpoint": "https://developer.api.autodesk.com/authentication/v2/authorize",
     "TokenEndpoint": "https://developer.api.autodesk.com/authentication/v2/token",
     "UserInfoEndpoint": "https://api.userprofile.autodesk.com/userinfo"
-  },
-  "DesktopConnector": {
-    "Enabled": true,
-    "PreferredPathCheck": true
-  },
-  "Logging": {
-    "LogLevel": {
-      "Default": "Information",
-      "Microsoft": "Warning",
-      "System.Net.Http.HttpClient": "Warning"
-    }
   }
 }
 ```
 
 ---
 
-## 3. Configuring Development Secrets
+## 3. Desktop Connector and runner settings
 
-Never commit your `ClientId` or test credentials to `appsettings.json`. Instead, use `dotnet user-secrets`:
+`DesktopConnector:SyncRootPath` optionally overrides `%USERPROFILE%\DC\ACCDocs`. Supply an absolute local path to the ACCDocs root, not the hub, project, a UNC share or a mapped network drive. For example, merge `"DesktopConnector": { "SyncRootPath": "D:\\DC\\ACCDocs" }` into an override file. The reader checks the path; this setting does not configure Desktop Connector or hydrate files.
 
-```powershell
-cd DigitalMIDP
-dotnet user-secrets init
-dotnet user-secrets set "Autodesk:ClientId" "YOUR_APS_CLIENT_ID"
-dotnet user-secrets set "Autodesk:RedirectUri" "http://localhost:8080/callback/"
-```
-
-Verify secrets are loaded:
-```powershell
-dotnet user-secrets list
-```
+Set polling **per project in the runner UI**, not in `appsettings.json`. See the [operator guide](../DigitalMIDP.ManifestRunner/README.md) for enrollment, interval and publication checks.
 
 ## Company-specific Autodesk Client ID
 

@@ -1,6 +1,7 @@
 ﻿using DigitalMIDP.Application.Dtos;
 using DigitalMIDP.Application.Exceptions;
 using DigitalMIDP.Application.Interfaces;
+using DigitalMIDP.Application.Manifests;
 using Microsoft.Extensions.Logging;
 
 namespace DigitalMIDP.Application.UseCases;
@@ -253,6 +254,8 @@ public sealed class FileListingUseCase : IFileListingUseCase
                     projectId, item.Id, nextPath, accessToken, results, visitedFolderIds, depth + 1, cancellationToken);
                 continue;
             }
+
+            if (ProjectManifest.IsReserved(item.Name)) continue;
 
             // A file with no urn cannot have its custom attributes read or written - the attributes
             // endpoints are keyed on it. It is still listed, because the file genuinely exists and

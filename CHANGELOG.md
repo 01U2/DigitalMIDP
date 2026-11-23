@@ -12,6 +12,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Ensure your entries are concise, factual, and verified.
 
 ---
+## [2026-11-22] - Manifest runner and local file register
+
+### Added
+- Optional MSI Manifest Runner feature for per-project enrollment, scheduled APS inventory checks and changed-only publication in ACC Templates. The [operator guide](DigitalMIDP.ManifestRunner/README.md) covers permissions, seeding and reader rollout.
+
+### Changed
+- Grid reads, Refresh and editor initialization use the synced manifest without a live listing fallback. Attribute Save validates live state and overlays only confirmed values until a newer publication arrives.
+- Verification: solution build and 518 automated tests passed. The inventory fixture counted **file-detail GETs**, not total HTTP requests: 3 cold, 0 warm, 1 after a file change. No live ACC project or disposable-machine MSI lifecycle smoke was exercised.
+
+## [2026-11-22] - Complete manifest v1 folder hierarchy
+
+### Changed
+- Manifest v1 requires `publishedAtUtc` and each folder's `name`, `parentFolderId` (null for roots), and `pathInProject`. Earlier v1 fixtures without these fields are rejected. Reading and writing validate parent links and folder paths regardless of folder order.
+
+## [2026-11-22] - Project manifest v1 contract
+
+### Added
+- Shared Application model and JSON serializer for folder-specific file metadata and attribute-ID values. The reader checks the requested project identity, revision, schema, and UI paths and links before returning a catalog.
+
 ## [2026-11-07] Release v1.1.0
 
 ### Added

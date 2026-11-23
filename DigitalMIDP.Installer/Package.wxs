@@ -37,7 +37,9 @@
 		<!-- %LOCALAPPDATA%\Programs\DigitalMIDP (user-writable, no elevation) -->
 		<StandardDirectory Id="LocalAppDataFolder">
 			<Directory Id="ProgramsFolder" Name="Programs">
-				<Directory Id="INSTALLFOLDER" Name="DigitalMIDP" />
+				<Directory Id="INSTALLFOLDER" Name="DigitalMIDP">
+					<Directory Id="RUNNERFOLDER" Name="ManifestRunner" />
+				</Directory>
 			</Directory>
 		</StandardDirectory>
 
@@ -45,31 +47,43 @@
 			<Directory Id="AppMenuFolder" Name="DigitalMIDP" />
 		</StandardDirectory>
 
-		<Feature Id="Main">
+		<Property Id="INSTALLLEVEL" Value="1" />
+		<Feature Id="Main" Title="DigitalMIDP client" Level="1" AllowAbsent="no" AllowAdvertise="no" ConfigurableDirectory="INSTALLFOLDER">
 			<ComponentGroupRef Id="AppFiles" />
 			<ComponentRef Id="InstallFolderCleanup" />
 			<ComponentRef Id="StartMenuShortcut" />
+		</Feature>
+		<Feature Id="ManifestRunner" Title="Manifest Runner" Description="Install the manifest publishing application and its Start Menu shortcut." Level="2" AllowAdvertise="no">
+			<ComponentGroupRef Id="RunnerFiles" />
+			<ComponentRef Id="RunnerShortcut" />
 		</Feature>
 
 		<!-- License agreement page -->
 		<WixVariable Id="WixUILicenseRtf" Value="Data\UserAgreement.rtf" />
 
-		<!-- Welcome -> License Agreement -> Install Folder -> Install -> Finish -->
-		<Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
-		<ui:WixUI Id="WixUI_InstallDir" />
+		<ui:WixUI Id="WixUI_FeatureTree" />
 	</Package>
 
 	<Fragment>
-		<!-- Every file comes from the DigitalMIDP build output folder (bin\<Configuration>\net8.0-windows\). -->
 		<ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
 			<Component>
-				<File Id="MainExe" Source="$(DigitalMIDP.TargetDir)DigitalMIDP.exe" KeyPath="yes" />
+				<File Id="MainExe" Source="$(var.ClientPublish)\DigitalMIDP.exe" KeyPath="yes" />
 			</Component>
-			<Files Include="$(DigitalMIDP.TargetDir)**">
-				<Exclude Files="$(DigitalMIDP.TargetDir)DigitalMIDP.exe" />
-				<Exclude Files="$(DigitalMIDP.TargetDir)**\*.pdb" />
+			<Files Include="$(var.ClientPublish)\**">
+				<Exclude Files="$(var.ClientPublish)\DigitalMIDP.exe" />
+				<Exclude Files="$(var.ClientPublish)\**\*.pdb" />
 			</Files>
 		</ComponentGroup>
+		<ComponentGroup Id="RunnerFiles" Directory="RUNNERFOLDER">
+			<Files Include="$(var.RunnerPublish)\**">
+				<Exclude Files="$(var.RunnerPublish)\**\*.pdb" />
+			</Files>
+		</ComponentGroup>
+		<Component Id="RunnerShortcut" Directory="AppMenuFolder">
+			<Shortcut Name="DigitalMIDP Manifest Runner" Target="[RUNNERFOLDER]DigitalMIDP.ManifestRunner.exe" WorkingDirectory="RUNNERFOLDER" Icon="AppIcon" />
+			<RemoveFolder Id="RemoveRunnerFolder" Directory="RUNNERFOLDER" On="uninstall" />
+			<RegistryValue Root="HKCU" Key="Software\01U2\DigitalMIDP" Name="runnerInstalled" Type="integer" Value="1" KeyPath="yes" />
+		</Component>
 
 		<!-- Removes the per-user install folder on uninstall -->
 		<Component Id="InstallFolderCleanup" Directory="INSTALLFOLDER">
