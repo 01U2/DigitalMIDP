@@ -2,6 +2,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DigitalMIDP.Application.Dtos;
+using DigitalMIDP.Application.Manifests;
 using DigitalMIDP.Application.UseCases;
 using Microsoft.Extensions.Logging;
 
@@ -254,16 +255,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     private void OnHubSelected()
     {
+        ProjectSelectionViewModel.ClearSelection();
         if (HubSelectionViewModel.SelectedHub == null)
         {
             return;
         }
 
         _logger.LogInformation("Hub selected: {HubName}", HubSelectionViewModel.SelectedHub.Name);
-
-        // Clear project selection when hub changes
-        ProjectSelectionViewModel.ClearSelection();
-        FilesViewModel.Items.Clear();
 
         // Automatically load projects for the selected hub
         _ = LoadProjectsAsync();
@@ -275,23 +273,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     private void OnProjectSelected()
     {
-        if (ProjectSelectionViewModel.SelectedProject == null || !IsAuthenticated)
+        if (!IsAuthenticated || HubSelectionViewModel.SelectedHub is not { } hub ||
+            ProjectSelectionViewModel.SelectedProject is not { } project)
         {
+            _ = FilesViewModel.ActivateProjectAsync(null);
             return;
         }
 
         _logger.LogInformation("Project selected: {ProjectName}", ProjectSelectionViewModel.SelectedProject.Name);
 
-        // Update FilesViewModel with project context (including hubId for metadata loading)
-        FilesViewModel.CurrentHubId = HubSelectionViewModel.SelectedHub?.Id;
-        FilesViewModel.CurrentHubName = HubSelectionViewModel.SelectedHub?.Name;
-        FilesViewModel.CurrentProjectId = ProjectSelectionViewModel.SelectedProject.Id;
-        FilesViewModel.CurrentProjectName = ProjectSelectionViewModel.SelectedProject.Name;
-        FilesViewModel.CurrentFolderId = null; // null = root folder
-
-        // The folder load fetches the project's metadata with its cancellation token; do not
-        // launch a second independent schema request that can complete after a project switch.
-        _ = FilesViewModel.LoadFolderItemsAsync();
+        _ = FilesViewModel.ActivateProjectAsync(new LocalManifestProject(hub.Id, project.Id, hub.Name, project.Name));
         _ = FilesViewModel.RefreshSyncStatusAsync();
     }
 

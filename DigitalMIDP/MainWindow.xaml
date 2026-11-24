@@ -256,7 +256,7 @@
 
                     <!-- Hub Selection -->
                     <TextBlock Grid.Column="0" Text="Hub:" FontSize="12" Foreground="#ECF0F1" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                    <ComboBox Grid.Column="1"
+                    <ComboBox x:Name="HubSelector" Grid.Column="1"
                               ItemsSource="{Binding HubSelectionViewModel.Hubs}"
                               SelectedItem="{Binding HubSelectionViewModel.SelectedHub, Mode=TwoWay}"
                               DisplayMemberPath="Name"
@@ -271,13 +271,21 @@
 
                     <!-- Project Selection -->
                     <TextBlock Grid.Column="3" Text="Project:" FontSize="12" Foreground="#ECF0F1" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                    <ComboBox Grid.Column="4"
+                    <ComboBox x:Name="ProjectSelector" Grid.Column="4"
                               ItemsSource="{Binding ProjectSelectionViewModel.Projects}"
                               SelectedItem="{Binding ProjectSelectionViewModel.SelectedProject, Mode=TwoWay}"
                               DisplayMemberPath="Name"
                               Height="28"
-                              VerticalAlignment="Center"
-                              IsEnabled="{Binding HubSelectionViewModel.SelectedHub, Converter={StaticResource NullToVis}}">
+                              VerticalAlignment="Center">
+                        <ComboBox.Style>
+                            <Style TargetType="ComboBox">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HubSelectionViewModel.SelectedHub}" Value="{x:Null}">
+                                        <Setter Property="IsEnabled" Value="False"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ComboBox.Style>
                         <ComboBox.ItemContainerStyle>
                             <Style TargetType="ComboBoxItem">
                                 <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
@@ -416,9 +424,9 @@
                                 IsEnabled="{Binding FilesViewModel.IsCreatingDeliverables, Converter={StaticResource InverseBool}}"
                                 Click="NewDeliverableButton_Click"/>
 
-                        <Button Content="🔄 Refresh Data"
+                        <Button x:Name="RefreshDataButton" Content="🔄 Refresh Data"
                                 Grid.Column="3"
-                                Command="{Binding FilesViewModel.LoadFolderItemsCommand}"
+                                Command="{Binding FilesViewModel.RefreshCommand}"
                                 Style="{StaticResource PrimaryButtonStyle}"
                                 Padding="10,5"
                                 Margin="0,0,5,0"/>
@@ -485,6 +493,8 @@
                          panel rather than each pinned to Grid.Row="1" directly, so they lay out one
                          above the other instead of overlapping. -->
                     <StackPanel Grid.Row="1" Margin="0,0,0,10">
+                        <TextBlock Text="{Binding FilesViewModel.ManifestStatusText}" TextWrapping="Wrap"
+                                   Visibility="{Binding FilesViewModel.ManifestStatusText, Converter={StaticResource NullToVis}}"/>
                         <!-- Loading a project is the longest operation in the application (a recursive
                              folder walk, then a path lookup per file, then the attribute batch), so it
                              is cancellable - previously a user who picked the wrong project could only

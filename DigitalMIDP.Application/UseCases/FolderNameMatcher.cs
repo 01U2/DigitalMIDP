@@ -11,7 +11,7 @@ namespace DigitalMIDP.Application.UseCases;
 /// therefore done on a normalised form, and discipline matching falls back through progressively
 /// looser rules rather than failing outright.
 /// </summary>
-internal static class FolderNameMatcher
+public static class FolderNameMatcher
 {
     /// <summary>
     /// Folder names accepted for each ISO 19650 lifecycle stage, already normalised by
@@ -43,11 +43,14 @@ internal static class FolderNameMatcher
     /// </summary>
     internal static readonly string[] HiddenAdminFolderNames = ["00projectfiles"];
 
+    internal static readonly string[] TemplateFolderNames = ["templates", "template", "projecttemplates", "projecttemplate"];
+    public static bool IsTemplateFolder(string? name) => TemplateFolderNames.Contains(Normalize(name));
+
     /// <summary>
     /// True for a folder that must be skipped entirely wherever the app walks a project's file tree -
     /// see <see cref="HiddenAdminFolderNames"/>.
     /// </summary>
-    internal static bool IsHiddenAdminFolder(string? name) =>
+    public static bool IsHiddenAdminFolder(string? name) =>
         HiddenAdminFolderNames.Contains(Normalize(name));
 
     /// <summary>
@@ -167,7 +170,7 @@ internal static class FolderNameMatcher
     /// Returns null when no segment matches any known stage - a file directly under the project root,
     /// or one in a folder structure that doesn't follow the WIP/Shared/Published/Archive convention.
     /// </summary>
-    internal static CdeLifecycleStage? ClassifyLifecycleStage(string? path)
+    public static CdeLifecycleStage? ClassifyLifecycleStage(string? path)
     {
         if (string.IsNullOrWhiteSpace(path))
         {

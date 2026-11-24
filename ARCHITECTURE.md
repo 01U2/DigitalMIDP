@@ -76,6 +76,10 @@ Dependencies strictly point **inward** toward the Domain:
 
 ## Autodesk Desktop Connector Integration
 
+The file register has one writer per project and many local readers. The optional WPF Manifest Runner schedules APS reconciliation and publishes changed inventory as a version of `digitalmidp-manifest.json` in the project's Templates folder. The client watches the synced file and validates its hub, project, schema and revision before displaying it. Grid Refresh is local; the web fallback for **opening a file** below is not a fallback for a missing catalog.
+
+The shared contract lives in `DigitalMIDP.Application/Manifests`; Infrastructure implements the APS publisher and local reader. See the [system design](docs/architecture/SYSTEM-DESIGN.md), [API boundaries](docs/integrations/API-INTEGRATION.md) and [operator guide](DigitalMIDP.ManifestRunner/README.md).
+
 Autodesk Desktop Connector is a **first-class integration**:
 * Desktop Connector allows users to interact with ACC files directly on the local filesystem.
 * When a user requests to open a file or folder, the application dynamically resolves the local Desktop Connector path first.

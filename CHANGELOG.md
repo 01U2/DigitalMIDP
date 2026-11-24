@@ -12,6 +12,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Ensure your entries are concise, factual, and verified.
 
 ---
+## [2026-11-24]
+
+### Changed
+
+#### Mutual sign-in state buttons
+- Updated the Manifest Runner session controls so Sign in is shown only while signed out and Sign out is shown only after authentication completes.
+- Removed the redundant read-only Signed in checkbox and obsolete Session text label because the mutually exclusive buttons already communicate session state.
+- Restructured the Runner controls into responsive grid rows and columns.
+
+#### Runner UI rename and theme alignment
+- Renamed the Manifest Runner UI surface text to Runner (window titles and startup messaging) while keeping behavior and project enrollment flow unchanged.
+- Refreshed `DigitalMIDP.ManifestRunner` windows to align with the DigitalMIDP blue/gray visual theme and sectioned card-style layout.
+- Updated the enrolled-project grid presentation with clearer proportional sizing and thin blue row/cell separators for stronger row demarcation.
+
+## [2026-11-22]
+
+### Added
+
+#### Manifest runner and local file register
+- Optional MSI Manifest Runner feature for per-project enrollment, scheduled APS inventory checks and changed-only publication in ACC Templates. The [operator guide](DigitalMIDP.ManifestRunner/README.md) covers permissions, seeding and reader rollout.
+
+#### Project manifest v1 contract
+- Shared Application model and JSON serializer for folder-specific file metadata and attribute-ID values.
+- The reader checks the requested project identity, revision, schema, and UI paths and links before returning a catalog.
+
+### Changed
+
+#### Manifest runner and local file register
+- Grid reads, Refresh and editor initialization use the synced manifest without a live listing fallback.
+- Attribute Save validates live state and overlays only confirmed values until a newer publication arrives.
+- Verification: solution build and 518 automated tests passed. The inventory fixture counted **file-detail GETs**, not total HTTP requests: 3 cold, 0 warm, 1 after a file change.
+- No live ACC project or disposable-machine MSI lifecycle smoke was exercised.
+
+#### Complete manifest v1 folder hierarchy
+- Manifest v1 requires `publishedAtUtc` and each folder's `name`, `parentFolderId` (null for roots), and `pathInProject`.
+- Earlier v1 fixtures without these fields are rejected.
+- Reading and writing validate parent links and folder paths regardless of folder order.
+
 ## [2026-11-07] Release v1.1.0
 
 ### Added

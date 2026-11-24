@@ -139,6 +139,10 @@ public interface IDataManagementService
         CancellationToken cancellationToken = default
     );
 
+    /// <summary>Checks the live parent, tip, definitions and changed-field baselines before Save; this does not lock the version.</summary>
+    Task ValidateAttributeEditAsync(string projectId, AttributeEditTarget target,
+        IReadOnlyList<CustomAttributeUpdateRequestDto> updates, CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Updates custom attribute values for a specific file version in ACC/BIM 360.
     /// POST /bim360/docs/v1/projects/{projectId}/versions/{versionUrn}/custom-attributes:batch-update

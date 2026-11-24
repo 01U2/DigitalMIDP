@@ -37,6 +37,7 @@ public sealed class CustomAttributesBatchUpdateResultItemDto
     public string? Type { get; set; }
 
     [JsonPropertyName("value")]
+    [JsonRequired]
     public string? Value { get; set; }
 }
 

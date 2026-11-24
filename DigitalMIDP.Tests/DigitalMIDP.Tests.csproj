@@ -35,6 +35,7 @@
     <ProjectReference Include="..\DigitalMIDP.Application\DigitalMIDP.Application.csproj" />
     <ProjectReference Include="..\DigitalMIDP.Infrastructure\DigitalMIDP.Infrastructure.csproj" />
     <ProjectReference Include="..\DigitalMIDP\DigitalMIDP.csproj" />
+    <ProjectReference Include="..\DigitalMIDP.ManifestRunner\DigitalMIDP.ManifestRunner.csproj" Aliases="runner" />
   </ItemGroup>
 
   <!-- Logging for tests -->

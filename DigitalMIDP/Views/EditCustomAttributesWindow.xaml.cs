@@ -17,6 +17,7 @@ public partial class EditCustomAttributesWindow : Window
 
         InitializeComponent();
         DataContext = viewModel;
+        Closing += (_, e) => e.Cancel = viewModel.IsSaving;
     }
 
     private void CancelButton_Click(object sender, RoutedEventArgs e)

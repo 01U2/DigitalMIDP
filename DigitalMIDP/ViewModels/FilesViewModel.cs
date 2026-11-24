@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -11,6 +11,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DigitalMIDP.Application.Dtos;
 using DigitalMIDP.Application.Interfaces;
+using DigitalMIDP.Application.Manifests;
 using DigitalMIDP.Application.UseCases;
 using Microsoft.Extensions.Logging;
 
@@ -22,32 +23,29 @@ namespace DigitalMIDP.ViewModels;
 /// </summary>
 public sealed partial class FilesViewModel : ObservableObject, IDisposable
 {
-    private readonly IFileListingUseCase _fileListingUseCase;
+    private readonly ILocalManifestReader _reader;
+    private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
     private readonly IDataManagementService _dataManagementService;
-    private readonly ITokenProvider _tokenProvider;
     private readonly IOpenFileLocallyUseCase _openFileLocallyUseCase;
     private readonly IOpenFileLocationUseCase _openFileLocationUseCase;
     private readonly IGetLocalFilePathUseCase _getLocalFilePathUseCase;
     private readonly IGetDesktopConnectorStatusUseCase _getDesktopConnectorStatusUseCase;
     private readonly IGetSyncedProjectStatusUseCase _getSyncedProjectStatusUseCase;
-    private readonly ICdeStructureUseCase _cdeStructureUseCase;
     private readonly ILogger<FilesViewModel> _logger;
     private readonly ColumnSelectorViewModel _columnSelectorViewModel;
     private readonly FileFilterViewModel _fileFilterViewModel;
-    private readonly Stack<string> _navigationStack = [];
-    private readonly Dictionary<string, IReadOnlyDictionary<string, string?>> _customAttributesByItemUrn = new(StringComparer.OrdinalIgnoreCase);
-    private readonly DispatcherTimer _autoRefreshTimer;
+    private readonly Dictionary<string, IReadOnlyDictionary<string, string?>> _customAttributesByItemUrn = new(StringComparer.Ordinal);
     private readonly DispatcherTimer _clipboardStatusTimer;
 
-    // Cancels a still-running LoadFolderItemsAsync call when a newer one starts (e.g. the user
-    // switched projects again before the first one finished) - see LoadFolderItemsAsync. Also
-    // cancelled by CancelLoad (the user's own Cancel button) and by Dispose.
     private CancellationTokenSource? _loadFolderItemsCts;
-
-    // See SetAutoRefreshPaused. _autoRefreshMissed records that a tick was skipped while paused, so
-    // resuming catches up once instead of waiting out another full interval.
-    private bool _autoRefreshPaused;
-    private bool _autoRefreshMissed;
+    private LocalManifestProject? _activeProject;
+    public ProjectManifest? CurrentManifest { get; private set; }
+    private string? _manifestStatusText;
+    public string? ManifestStatusText
+    {
+        get => _manifestStatusText;
+        private set => SetProperty(ref _manifestStatusText, value);
+    }
 
     private bool _disposed;
 
@@ -108,29 +106,7 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private ObservableCollection<MetadataFieldDisplayDto> availableMetadataFields = [];
 
-    /// <summary>
-    /// The naming standard's own filename-code fields (e.g. Project, Originator, Volume/System,
-    /// Level/Location) - deliberately EXCLUDED from <see cref="AvailableMetadataFields"/> because
-    /// they aren't independently editable through Edit Attributes (see
-    /// <c>DataManagementService.GetProjectNamingStandardAsync</c>), but still carry a real per-file
-    /// value worth showing as a grid column. Populated from <see cref="ICdeStructureUseCase.GetNamingConventionAsync"/>,
-    /// the same cached source the deliverable wizard uses for the identical fields.
-    /// </summary>
-    [ObservableProperty]
-    private ObservableCollection<MetadataFieldDisplayDto> namingCodeFields = [];
-
-    /// <summary>
-    /// The full set of attribute fields the grid's columns and column-selector menu should offer -
-    /// <see cref="AvailableMetadataFields"/> (true, editable custom attributes) plus
-    /// <see cref="NamingCodeFields"/> (read-only filename-code fields), deduplicated by name so a
-    /// naming standard that happens to define the same name in both sources doesn't produce two
-    /// columns. Only the grid uses this union; Edit Attributes keeps using <see cref="AvailableMetadataFields"/>
-    /// directly.
-    /// </summary>
-    public IReadOnlyList<MetadataFieldDisplayDto> GridMetadataFields =>
-        AvailableMetadataFields
-            .Concat(NamingCodeFields.Where(nc => !AvailableMetadataFields.Any(f => string.Equals(f.Name, nc.Name, StringComparison.OrdinalIgnoreCase))))
-            .ToList();
+    public IReadOnlyList<MetadataFieldDisplayDto> GridMetadataFields => AvailableMetadataFields;
 
     [ObservableProperty]
     private ObservableCollection<MetadataFieldValueDto> selectedItemMetadata = [];
@@ -283,7 +259,7 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
     /// True once loading has finished and the current folder/project genuinely has no files, so the
     /// UI can show an explanatory empty-state message instead of a bare, unexplained blank grid.
     /// </summary>
-    public bool ShowEmptyState => !IsLoading && Items.Count == 0;
+    public bool ShowEmptyState => !IsLoading && CurrentManifest != null && Items.Count == 0;
 
     partial void OnIsLoadingChanged(bool value)
     {
@@ -357,47 +333,40 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
         // immediately so fields from the previous project cannot appear while the new one loads.
         _loadFolderItemsCts?.Cancel();
         AvailableMetadataFields.Clear();
-        NamingCodeFields.Clear();
         _fileFilterViewModel.SetProject(value);
         _columnSelectorViewModel.SetProject(value);
     }
 
     public FilesViewModel(
-        IFileListingUseCase fileListingUseCase,
+        ILocalManifestReader reader,
         IDataManagementService dataManagementService,
-        ITokenProvider tokenProvider,
         IOpenFileLocallyUseCase openFileLocallyUseCase,
         IOpenFileLocationUseCase openFileLocationUseCase,
         IGetLocalFilePathUseCase getLocalFilePathUseCase,
         IGetDesktopConnectorStatusUseCase getDesktopConnectorStatusUseCase,
         IGetSyncedProjectStatusUseCase getSyncedProjectStatusUseCase,
-        ICdeStructureUseCase cdeStructureUseCase,
         ColumnSelectorViewModel columnSelectorViewModel,
         FileFilterViewModel fileFilterViewModel,
         ILogger<FilesViewModel> logger)
     {
-        ArgumentNullException.ThrowIfNull(fileListingUseCase);
+        ArgumentNullException.ThrowIfNull(reader);
         ArgumentNullException.ThrowIfNull(dataManagementService);
-        ArgumentNullException.ThrowIfNull(tokenProvider);
         ArgumentNullException.ThrowIfNull(openFileLocallyUseCase);
         ArgumentNullException.ThrowIfNull(openFileLocationUseCase);
         ArgumentNullException.ThrowIfNull(getLocalFilePathUseCase);
         ArgumentNullException.ThrowIfNull(getDesktopConnectorStatusUseCase);
         ArgumentNullException.ThrowIfNull(getSyncedProjectStatusUseCase);
-        ArgumentNullException.ThrowIfNull(cdeStructureUseCase);
         ArgumentNullException.ThrowIfNull(columnSelectorViewModel);
         ArgumentNullException.ThrowIfNull(fileFilterViewModel);
         ArgumentNullException.ThrowIfNull(logger);
 
-        _fileListingUseCase = fileListingUseCase;
+        _reader = reader;
         _dataManagementService = dataManagementService;
-        _tokenProvider = tokenProvider;
         _openFileLocallyUseCase = openFileLocallyUseCase;
         _openFileLocationUseCase = openFileLocationUseCase;
         _getLocalFilePathUseCase = getLocalFilePathUseCase;
         _getDesktopConnectorStatusUseCase = getDesktopConnectorStatusUseCase;
         _getSyncedProjectStatusUseCase = getSyncedProjectStatusUseCase;
-        _cdeStructureUseCase = cdeStructureUseCase;
         _columnSelectorViewModel = columnSelectorViewModel;
         _fileFilterViewModel = fileFilterViewModel;
         // Named handlers, not lambdas: Dispose has to detach these, and an anonymous handler cannot
@@ -405,12 +374,6 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
         _fileFilterViewModel.FiltersChanged += OnFiltersChanged;
         _logger = logger;
         CurrentFolderName = "Files";
-
-        _autoRefreshTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromMinutes(5)
-        };
-        _autoRefreshTimer.Tick += AutoRefreshTimerTick;
 
         _clipboardStatusTimer = new DispatcherTimer
         {
@@ -435,115 +398,11 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Loads items from the current project.
-    /// Set CurrentHubId and CurrentProjectId before calling.
-    /// </summary>
-    [RelayCommand]
-    public async Task LoadFolderItemsAsync()
-    {
-        if (string.IsNullOrWhiteSpace(CurrentHubId) || string.IsNullOrWhiteSpace(CurrentProjectId))
-        {
-            return;
-        }
-
-        // Cancel any load already in flight. Without this, switching projects again before the
-        // first project's load finishes lets that earlier call resume (after its awaited API
-        // call returns) with CurrentProjectId already pointing at the NEW project while it's
-        // still holding the OLD project's Items/item URNs - sending a mismatched project id +
-        // item URN combination to ACC's custom-attributes endpoint, which rejects it with 400.
-        // Cancelling the superseded call's token and checking it after every await below stops
-        // it from touching shared state (Items, AvailableMetadataFields) once it's stale.
-        _loadFolderItemsCts?.Cancel();
-        var cts = new CancellationTokenSource();
-        _loadFolderItemsCts = cts;
-        var cancellationToken = cts.Token;
-
-        var hubId = CurrentHubId!;
-        var projectId = CurrentProjectId!;
-
-        IsLoading = true;
-        IsCancellingLoad = false;
-        ErrorMessage = null;
-        LoadingStatusText = "Loading files...";
-
-        try
-        {
-            _logger.LogInformation("Loading files for hub {HubId} and project {ProjectId}", hubId, projectId);
-
-            // Fetched per call, never stored on the ViewModel - see TokenExposureTests.
-            var accessToken = await _tokenProvider.GetAccessTokenAsync(cancellationToken);
-            var response = await _fileListingUseCase.GetAllProjectFilesAsync(hubId, projectId, accessToken, cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-            Items = new ObservableCollection<ItemDto>(response.Items);
-
-            CurrentFolderName = "Project Files";
-            CanNavigateBack = false;
-            _logger.LogInformation("Loaded {ItemCount} files", Items.Count);
-
-            SelectedItem = null;
-            SelectedItemMetadata.Clear();
-
-            // CRITICAL: Enrich ALL items with path and web link metadata FIRST
-            // This ensures WebViewLink is always available, not just for items with custom attributes
-            await EnrichItemsWithPathMetadataAsync(cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-
-            // THEN enrich with custom attributes (which won't overwrite path/weblink data)
-            LoadingStatusText = "Loading custom attributes...";
-            await LoadCustomAttributesAsync(cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-
-            await LoadProjectMetadataAsync(cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-
-            await LoadNamingCodeFieldsAsync(hubId, projectId, cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-
-            // Rebuilds every column's distinct-value list from the now-fully-enriched items, then
-            // re-applies whichever search/filter selection is current (freshly loaded from saved
-            // preferences, on this project's first load).
-            _fileFilterViewModel.Rebuild(Items, GridMetadataFields);
-            ItemsView?.Refresh();
-
-            if (!_autoRefreshTimer.IsEnabled)
-            {
-                _autoRefreshTimer.Start();
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // Either superseded by a newer LoadFolderItemsAsync call (the user switched projects
-            // again) or cancelled on purpose via CancelLoad. Neither is a failure, so neither is
-            // surfaced as one.
-            _logger.LogInformation("Load cancelled or superseded for project {ProjectId}", projectId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to load files");
-            ErrorMessage = $"Failed to load files: {ex.Message}";
-        }
-        finally
-        {
-            // Only the still-current load resets these - a stale, superseded call must not
-            // clear the spinner/status text out from under the load that replaced it.
-            if (ReferenceEquals(_loadFolderItemsCts, cts))
-            {
-                IsLoading = false;
-                IsCancellingLoad = false;
-                LoadingStatusText = null;
-
-                cts.Dispose();
-                _loadFolderItemsCts = null;
-            }
-        }
-    }
-
-    /// <summary>
     /// Adds files this application just created straight into the grid, instead of reloading the
     /// project.
     ///
     /// <para>
-    /// Creating one deliverable used to be followed by a full <see cref="LoadFolderItemsAsync"/>:
+    /// Creating one deliverable used to be followed by a full project reload:
     /// the entire folder tree re-walked, a path lookup re-issued for every pre-existing file, the
     /// attribute batch re-fetched for all of them, and the schema re-resolved - to surface one row
     /// that was already fully described by the creation response. For a 28-file project that was
@@ -625,6 +484,7 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
                     var metadata = await _dataManagementService.GetItemPathMetadataAsync(
                         projectId!, created.ItemUrn!, CancellationToken.None);
 
+                    if (CurrentProjectId != projectId) return;
                     if (metadata is null)
                     {
                         continue;
@@ -672,17 +532,20 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
     /// </summary>
     public void ResetForSignOut()
     {
-        _autoRefreshTimer.Stop();
+        _editSession++;
+        _highestRevision = 0;
+        _pendingEdits.Clear();
+        _activeProject = null;
+        CurrentManifest = null;
         _clipboardStatusTimer.Stop();
-        _autoRefreshMissed = false;
 
         _loadFolderItemsCts?.Cancel();
+        _loadFolderItemsCts = null;
 
         Items.Clear();
         SelectedItem = null;
         SelectedItemMetadata.Clear();
         AvailableMetadataFields.Clear();
-        NamingCodeFields.Clear();
         _customAttributesByItemUrn.Clear();
 
         CurrentHubId = null;
@@ -694,6 +557,8 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
         ErrorMessage = null;
         ClipboardStatusText = null;
         LoadingStatusText = null;
+        IsLoading = false;
+        ManifestStatusText = null;
 
         OnPropertyChanged(nameof(ShowEmptyState));
     }
@@ -719,8 +584,6 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
 
         _disposed = true;
 
-        _autoRefreshTimer.Stop();
-        _autoRefreshTimer.Tick -= AutoRefreshTimerTick;
 
         _clipboardStatusTimer.Stop();
         _clipboardStatusTimer.Tick -= ClipboardStatusTimerTick;
@@ -728,164 +591,11 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
         _fileFilterViewModel.FiltersChanged -= OnFiltersChanged;
 
         _loadFolderItemsCts?.Cancel();
-        _loadFolderItemsCts?.Dispose();
         _loadFolderItemsCts = null;
 
         _deliverableCreationCts?.Cancel();
         _deliverableCreationCts?.Dispose();
         _deliverableCreationCts = null;
-    }
-
-    /// <summary>
-    /// Enriches all items with path and web view link metadata from APS.
-    /// This ensures WebViewLink is always available for all files, not just those with custom attributes.
-    /// Calls GET /data/v1/projects/{projectId}/items/{itemUrn}?includePathInProject=true for each item.
-    /// </summary>
-    private async Task EnrichItemsWithPathMetadataAsync(CancellationToken cancellationToken)
-    {
-        if (cancellationToken.IsCancellationRequested || string.IsNullOrWhiteSpace(CurrentProjectId))
-        {
-            return;
-        }
-
-        // Safe to read CurrentProjectId here: if a newer LoadFolderItemsAsync call had started,
-        // it would have cancelled this token first (see LoadFolderItemsAsync), so an
-        // uncancelled token means no project switch has happened since this load began.
-        var projectId = CurrentProjectId!;
-
-        // Only enrich file items (folders don't have web links or meaningful paths)
-        var fileItems = Items.Where(item => item.Type == ItemType.File && !string.IsNullOrWhiteSpace(item.ItemUrn)).ToList();
-
-        if (fileItems.Count == 0)
-        {
-            _logger.LogInformation("No file items to enrich with path metadata");
-            return;
-        }
-
-        _logger.LogInformation(
-            "Enriching {FileCount} file items with path and web view link metadata",
-            fileItems.Count);
-
-        var totalCount = fileItems.Count;
-        var completedCount = 0;
-        LoadingStatusText = $"Loading 0 of {totalCount} files...";
-
-        // Bounded concurrency. The comment here used to claim "with reasonable throttling" while
-        // actually starting one task per file at once - 200 simultaneous requests for a 200-file
-        // project, which is what provoked the 429s this fan-out now rides out via the retry handler.
-        // Eight matches the limit the service layer's own bulk path lookup uses.
-        const int MaxConcurrentRequests = 8;
-        using var throttler = new SemaphoreSlim(MaxConcurrentRequests, MaxConcurrentRequests);
-
-        try
-        {
-            var tasks = fileItems.Select(async item =>
-            {
-                await throttler.WaitAsync(cancellationToken);
-
-                try
-                {
-                    var metadata = await _dataManagementService.GetItemPathMetadataAsync(
-                        projectId,
-                        item.ItemUrn!,
-                        cancellationToken);
-
-                    if (metadata != null)
-                    {
-                        return item with
-                        {
-                            PathInProject = metadata.PathInProject,
-                            WebViewLink = metadata.WebViewLink
-                        };
-                    }
-
-                    _logger.LogWarning(
-                        "Failed to retrieve path metadata for item {ItemName} (URN: {ItemUrn})",
-                        item.Name,
-                        item.ItemUrn);
-
-                    return item;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(
-                        ex,
-                        "Error fetching path metadata for item {ItemName} (URN: {ItemUrn})",
-                        item.Name,
-                        item.ItemUrn);
-
-                    // Return original item on error
-                    return item;
-                }
-                finally
-                {
-                    throttler.Release();
-
-                    var completed = Interlocked.Increment(ref completedCount);
-
-                    // Left alone once the user has asked to cancel, so "Cancelling..." is not
-                    // overwritten by progress from the requests already in flight.
-                    if (!IsCancellingLoad)
-                    {
-                        LoadingStatusText = $"Loading {completed} of {totalCount} files...";
-                    }
-                }
-            });
-
-            var enrichedItems = await Task.WhenAll(tasks);
-
-            if (cancellationToken.IsCancellationRequested)
-            {
-                return;
-            }
-
-            // Update the observable collection
-            // Build a dictionary of enriched items by ID for quick lookup
-            var enrichedById = enrichedItems.ToDictionary(item => item.Id, StringComparer.OrdinalIgnoreCase);
-
-            // Update items in place
-            for (int i = 0; i < Items.Count; i++)
-            {
-                if (enrichedById.TryGetValue(Items[i].Id, out var enrichedItem))
-                {
-                    Items[i] = enrichedItem;
-                }
-            }
-
-            var successCount = enrichedItems.Count(item => !string.IsNullOrWhiteSpace(item.WebViewLink));
-            _logger.LogInformation(
-                "Successfully enriched {SuccessCount}/{TotalCount} items with path metadata",
-                successCount,
-                fileItems.Count);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to enrich items with path metadata");
-            // Don't throw - this is not critical enough to block file listing
-        }
-    }
-
-    /// <summary>
-    /// Manual refresh command for reloading project files.
-    ///
-    /// <para>
-    /// Drops this project's cached metadata first, which is what makes an explicit Refresh mean
-    /// "go and ask APS again" rather than "re-read what you already had". Caching the project's
-    /// schema and its files' paths is what removed the repeated traffic; without this, a change made
-    /// in ACC's web UI would not appear until the cached entry expired, and Refresh would look
-    /// broken.
-    /// </para>
-    /// </summary>
-    [RelayCommand]
-    private async Task RefreshAsync()
-    {
-        if (!string.IsNullOrWhiteSpace(CurrentProjectId))
-        {
-            _dataManagementService.InvalidateProjectCache(CurrentProjectId!);
-            _cdeStructureUseCase.Invalidate(CurrentProjectId!);
-        }
-
-        await LoadFolderItemsAsync();
     }
 
     /// <summary>
@@ -941,15 +651,18 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
             return;
         }
 
+        var project = _activeProject;
         try
         {
-            SyncedProjectStatus = await _getSyncedProjectStatusUseCase.ExecuteAsync(
+            var status = await _getSyncedProjectStatusUseCase.ExecuteAsync(
                 CurrentHubName!, CurrentProjectName!, CancellationToken.None);
+            if (ReferenceEquals(_activeProject, project)) SyncedProjectStatus = status;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error refreshing Desktop Connector project sync status");
-            SyncedProjectStatus = new SyncedProject(CurrentHubName!, CurrentProjectName!, string.Empty, null, SyncStatus.Error);
+            if (ReferenceEquals(_activeProject, project))
+                SyncedProjectStatus = new SyncedProject(CurrentHubName!, CurrentProjectName!, string.Empty, null, SyncStatus.Error);
         }
     }
 
@@ -1192,324 +905,6 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
         ClipboardStatusText = null;
     }
 
-    private async void AutoRefreshTimerTick(object? sender, EventArgs e)
-    {
-        if (_disposed
-            || IsLoading
-            || IsCreatingDeliverables
-            || string.IsNullOrWhiteSpace(CurrentHubId)
-            || string.IsNullOrWhiteSpace(CurrentProjectId))
-        {
-            // Skipping while a deliverable batch runs is new and deliberate: an auto-refresh in the
-            // middle of a batch re-reads the folder the batch is actively writing to, competing with
-            // it for the rate limit for a listing that is out of date the moment the next file
-            // lands.
-            return;
-        }
-
-        if (_autoRefreshPaused)
-        {
-            // Nobody can see the grid, so the full project walk would be wasted APS traffic - an
-            // application left open overnight on a locked machine otherwise re-walks the project
-            // every five minutes until morning. Resuming catches up once (SetAutoRefreshPaused).
-            _autoRefreshMissed = true;
-            return;
-        }
-
-        // Does NOT clear the cache, unlike the user-driven RefreshAsync below. An automatic tick is
-        // there to pick up new and changed FILES; a project's attribute schema and its files' paths
-        // are not what it is looking for, and dropping them would make every tick pay the full
-        // uncached cost for data that had not changed.
-        await LoadFolderItemsAsync();
-        _ = RefreshSyncStatusAsync();
-    }
-
-    /// <summary>
-    /// Pauses or resumes the five-minute auto-refresh. Called by the view when the window is
-    /// minimised or the Windows session is locked, and again when it is visible.
-    ///
-    /// <para>
-    /// The timer itself keeps running (a tick that returns early costs nothing); only the APS work
-    /// is skipped. If at least one tick was skipped, resuming refreshes once straight away so the
-    /// user does not come back to a listing that is up to an interval older than they expect.
-    /// </para>
-    /// </summary>
-    public void SetAutoRefreshPaused(bool paused)
-    {
-        if (_autoRefreshPaused == paused)
-        {
-            return;
-        }
-
-        _autoRefreshPaused = paused;
-        _logger.LogInformation("Auto-refresh {State}", paused ? "paused (window not visible)" : "resumed");
-
-        if (!paused && _autoRefreshMissed)
-        {
-            _autoRefreshMissed = false;
-            AutoRefreshTimerTick(this, EventArgs.Empty);
-        }
-    }
-
-    private async Task LoadCustomAttributesAsync(CancellationToken cancellationToken)
-    {
-        if (cancellationToken.IsCancellationRequested)
-        {
-            return;
-        }
-
-        _logger.LogInformation(
-            "Loading custom attributes for project {ProjectId} folder {FolderId}",
-            CurrentProjectId,
-            CurrentFolderId);
-
-        try
-        {
-            // Signal that custom attributes are loading
-            _columnSelectorViewModel.IsCustomAttributesLoading = true;
-            _columnSelectorViewModel.ClearCustomAttributeVisibility();
-
-            _customAttributesByItemUrn.Clear();
-
-            var itemUrns = Items
-                .Select(item => item.ItemUrn)
-                .Where(urn => !string.IsNullOrWhiteSpace(urn))
-                .Select(urn => urn!)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
-            if (itemUrns.Count == 0 || string.IsNullOrWhiteSpace(CurrentProjectId))
-            {
-                AvailableMetadataFields.Clear();
-                return;
-            }
-
-            // Safe to read CurrentProjectId here: if a newer LoadFolderItemsAsync call had
-            // started, it would have cancelled this token first, and we already returned above.
-            var projectId = CurrentProjectId!;
-
-            _logger.LogInformation(
-                "Fetching custom attributes for {ItemCount} items in project {ProjectId}",
-                itemUrns.Count,
-                projectId);
-
-            // includePathMetadata: false - paths and web links are resolved by the separate pass
-            // above (EnrichItemsWithPathMetadataAsync), which covers every file rather than only the
-            // ones this batch returns a row for. Asking for them here as well would duplicate that
-            // work: one extra HTTP request per file, for values this method then discards.
-            var results = await _dataManagementService.GetItemCustomAttributesAsync(
-                projectId,
-                itemUrns,
-                includePathMetadata: false,
-                cancellationToken);
-
-            if (cancellationToken.IsCancellationRequested)
-            {
-                return;
-            }
-
-            var resultList = results.ToList();
-
-            // Create a lookup dictionary for quick access by ItemUrn
-            var resultsByUrn = resultList.ToDictionary(
-                r => r.Urn,
-                r => r,
-                StringComparer.OrdinalIgnoreCase);
-
-            if (resultsByUrn.Count < itemUrns.Count)
-            {
-                _logger.LogWarning(
-                    "Custom attribute enrichment incomplete. Requested {RequestedCount} items, received {ReceivedCount}.",
-                    itemUrns.Count,
-                    resultsByUrn.Count);
-            }
-
-            // Enrich items with custom attributes
-            var enrichedItems = Items
-                .Select(item =>
-                {
-                    // Store in cache for detail panel
-                    if (!string.IsNullOrWhiteSpace(item.ItemUrn) && resultsByUrn.TryGetValue(item.ItemUrn, out var result))
-                    {
-                        var attributes = new Dictionary<string, string?>(result.Attributes, StringComparer.OrdinalIgnoreCase);
-                        _customAttributesByItemUrn[item.ItemUrn] = attributes;
-
-                        // Only update custom attributes - preserve PathInProject and WebViewLink from Step 1 enrichment
-                        // The batch-get endpoint doesn't return weblinks, so we must not overwrite them
-                        return item with
-                        {
-                            CustomAttributes = result.Attributes,
-                            TipVersionUrn = result.VersionUrn
-                        };
-                    }
-
-                    return item;
-                })
-                .ToList();
-
-            // Update observable collection with enriched items
-            Items.Clear();
-            foreach (var item in enrichedItems)
-            {
-                Items.Add(item);
-            }
-
-            if (SelectedItem is not null)
-            {
-                PopulateSelectedItemMetadata(SelectedItem);
-            }
-
-            _logger.LogInformation(
-                "Completed custom attribute enrichment for {EnrichedCount} items in project {ProjectId}",
-                resultsByUrn.Count,
-                CurrentProjectId);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Failed to load custom attributes for project {ProjectId} folder {FolderId}",
-                CurrentProjectId,
-                CurrentFolderId);
-            throw;
-        }
-        finally
-        {
-            // Signal that custom attributes are done loading
-            _columnSelectorViewModel.IsCustomAttributesLoading = false;
-        }
-    }
-
-    /// <summary>
-    /// Loads metadata field definitions (attribute IDs, types, and options) for the project's true
-    /// custom attributes - i.e. exactly what ACC web's own "Edit Attributes" modal would show, with
-    /// naming-standard/file-naming-scheme fields already excluded by the service layer. There is
-    /// intentionally no fallback that derives fields from observed attribute names: doing so would
-    /// re-include naming-scheme fields (Project, Originator, etc.), since those still carry real
-    /// per-file values even though they aren't independently editable.
-    /// </summary>
-    [RelayCommand]
-    public async Task LoadProjectMetadataAsync(CancellationToken cancellationToken = default)
-    {
-        if (cancellationToken.IsCancellationRequested)
-        {
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(CurrentHubId) || string.IsNullOrWhiteSpace(CurrentProjectId))
-        {
-            AvailableMetadataFields.Clear();
-            return;
-        }
-
-        var hubId = CurrentHubId;
-        var projectId = CurrentProjectId;
-        try
-        {
-            var namingStandard = await _dataManagementService.GetProjectNamingStandardAsync(
-                hubId,
-                projectId,
-                cancellationToken);
-
-            if (cancellationToken.IsCancellationRequested
-                || !string.Equals(CurrentHubId, hubId, StringComparison.OrdinalIgnoreCase)
-                || !string.Equals(CurrentProjectId, projectId, StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            // Do not exclude a real Title field: it belongs in Edit Attributes and is offered
-            // as a dynamic grid column. Only Deliverable Title is reserved by the static column.
-            AvailableMetadataFields.Clear();
-            foreach (var field in namingStandard.Metadata)
-            {
-                AvailableMetadataFields.Add(field);
-            }
-
-            _logger.LogInformation(
-                "AvailableMetadataFields populated with {Count} fields: [{Fields}]",
-                AvailableMetadataFields.Count,
-                string.Join(", ", AvailableMetadataFields.Select(f => $"{f.Name}(id={f.AttributeId})")));
-
-            if (SelectedItem is not null)
-            {
-                PopulateSelectedItemMetadata(SelectedItem);
-            }
-        }
-        catch (Exception ex)
-        {
-            if (!cancellationToken.IsCancellationRequested
-                && string.Equals(CurrentHubId, hubId, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(CurrentProjectId, projectId, StringComparison.OrdinalIgnoreCase))
-            {
-                _logger.LogWarning(ex, "Failed to load custom attribute schema for project {ProjectId}", projectId);
-                AvailableMetadataFields.Clear();
-            }
-        }
-    }
-
-    /// <summary>
-    /// Loads the project's naming-code fields (Project, Originator, Volume/System, Level/Location,
-    /// and similar) so they can appear as read-only grid columns - see <see cref="NamingCodeFields"/>
-    /// for why these are sourced separately from <see cref="AvailableMetadataFields"/>. A project with
-    /// no naming standard configured simply gets none of these columns, which is not an error.
-    /// </summary>
-    private async Task LoadNamingCodeFieldsAsync(string hubId, string projectId, CancellationToken cancellationToken)
-    {
-        if (cancellationToken.IsCancellationRequested)
-        {
-            return;
-        }
-
-        try
-        {
-            var convention = await _cdeStructureUseCase.GetNamingConventionAsync(hubId, projectId, cancellationToken);
-            if (cancellationToken.IsCancellationRequested
-                || !string.Equals(CurrentHubId, hubId, StringComparison.OrdinalIgnoreCase)
-                || !string.Equals(CurrentProjectId, projectId, StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            NamingCodeFields.Clear();
-            foreach (var field in convention.Fields)
-            {
-                NamingCodeFields.Add(new MetadataFieldDisplayDto(
-                    Name: field.Name,
-                    Type: field.Type,
-                    Description: null,
-                    Optional: field.Optional,
-                    Options: field.Options,
-                    DefaultValue: field.DefaultValue,
-                    AttributeId: field.AttributeId));
-            }
-
-            _logger.LogInformation(
-                "NamingCodeFields populated with {Count} field(s) for project {ProjectId}: [{Fields}]",
-                NamingCodeFields.Count,
-                projectId,
-                string.Join(", ", NamingCodeFields.Select(f => f.Name)));
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            if (!cancellationToken.IsCancellationRequested
-                && string.Equals(CurrentHubId, hubId, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(CurrentProjectId, projectId, StringComparison.OrdinalIgnoreCase))
-            {
-                _logger.LogWarning(ex, "Failed to load naming-code fields for project {ProjectId}", projectId);
-                NamingCodeFields.Clear();
-            }
-        }
-    }
-
     /// <summary>
     /// Handles selection of an item. Only allows files to be selected.
     /// Displays metadata for the selected file.
@@ -1542,7 +937,8 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
     {
         SelectedItemMetadata.Clear();
 
-        foreach (var field in AvailableMetadataFields)
+        var definitions = CurrentManifest?.Folders.FirstOrDefault(f => f.FolderId == selectedItem.ParentId)?.Definitions;
+        foreach (var field in definitions ?? GridMetadataFields)
         {
             var displayValue = GetMetadataValue(selectedItem, field.Name) ?? field.DefaultValue;
             if (displayValue is null)
@@ -1567,7 +963,7 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
     {
         if (string.IsNullOrWhiteSpace(item.ItemUrn))
         {
-            return null;
+            return item.CustomAttributes?.GetValueOrDefault(fieldName);
         }
 
         if (_customAttributesByItemUrn.TryGetValue(item.ItemUrn, out var attributes)
@@ -1583,7 +979,7 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
     /// Merges freshly-saved custom attribute values (from the Edit Attributes dialog) into the
     /// local cache and grid so the change is visible immediately without a full folder reload.
     /// </summary>
-    public void ApplyUpdatedCustomAttributes(string itemUrn, IReadOnlyDictionary<string, string?> updatedValues)
+    private void ApplyUpdatedCustomAttributes(string itemUrn, IReadOnlyDictionary<string, string?> updatedValues)
     {
         if (string.IsNullOrWhiteSpace(itemUrn))
         {
@@ -1598,20 +994,21 @@ public sealed partial class FilesViewModel : ObservableObject, IDisposable
         {
             merged[name] = value;
         }
+        if (merged.TryGetValue("Description", out var description)) merged[ColumnKeys.DeliverableTitle] = description;
 
         _customAttributesByItemUrn[itemUrn] = merged;
 
         for (int i = 0; i < Items.Count; i++)
         {
-            if (string.Equals(Items[i].ItemUrn, itemUrn, StringComparison.OrdinalIgnoreCase))
+            if (Items[i].ItemUrn == itemUrn)
             {
                 Items[i] = Items[i] with { CustomAttributes = merged };
             }
         }
 
-        if (SelectedItem is not null && string.Equals(SelectedItem.ItemUrn, itemUrn, StringComparison.OrdinalIgnoreCase))
+        if (SelectedItem?.ItemUrn == itemUrn)
         {
-            PopulateSelectedItemMetadata(SelectedItem);
+            SelectedItem = Items.First(i => i.ItemUrn == itemUrn);
         }
 
         // A value edited here (e.g. a new Status) has to appear as an option in that column's filter

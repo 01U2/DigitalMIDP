@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+	<OutputType>WinExe</OutputType>
+	<TargetFramework>net8.0-windows</TargetFramework>
+	<UseWPF>true</UseWPF>
+	<ImplicitUsings>enable</ImplicitUsings>
+	<Nullable>enable</Nullable>
+	<ApplicationIcon>..\DigitalMIDP\Assets\Icons\icon.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+	<ProjectReference Include="..\DigitalMIDP.Infrastructure\DigitalMIDP.Infrastructure.csproj" />
+	<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+	<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
+	<PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.3" />
+	<Compile Include="..\DigitalMIDP\Services\ApsClientConfiguration.cs" Link="Services\ApsClientConfiguration.cs" />
+	<Compile Include="..\DigitalMIDP\ViewModels\ClientIdSetupViewModel.cs" Link="ViewModels\ClientIdSetupViewModel.cs" />
+	<None Include="..\DigitalMIDP\appsettings.json" Link="appsettings.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

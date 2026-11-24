@@ -14,17 +14,19 @@ public class DesktopConnectorService : IDesktopConnectorService
 {
     private const string RegistryKeyPath64Bit = @"SOFTWARE\Autodesk\Desktop Connector";
     private const string RegistryKeyPath32Bit = @"SOFTWARE\WOW6432Node\Autodesk\Desktop Connector";
-    private const string SyncRootPathDefault = "DC\\ACCDocs";
+    internal static string DefaultSyncRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "DC", "ACCDocs");
     private const string ProjectFilesFolderName = "Project Files";
 
     private readonly ILogger<DesktopConnectorService> _logger;
-    private readonly string _userProfilePath;
+    private readonly string _syncRoot;
 
-    public DesktopConnectorService(ILogger<DesktopConnectorService> logger)
+    public DesktopConnectorService(ILogger<DesktopConnectorService> logger) : this(logger, DefaultSyncRoot) { }
+
+    internal DesktopConnectorService(ILogger<DesktopConnectorService> logger, string syncRoot)
     {
         ArgumentNullException.ThrowIfNull(logger);
         _logger = logger;
-        _userProfilePath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        _syncRoot = syncRoot;
     }
 
     /// <inheritdoc/>
@@ -361,7 +363,7 @@ public class DesktopConnectorService : IDesktopConnectorService
         var version = regKey.GetValue("Version") as string;
         var installPath = regKey.GetValue("InstallPath") as string;
 
-        var syncRootPath = ComputeSyncRootPath();
+        var syncRootPath = _syncRoot;
         var syncRootExists = !string.IsNullOrEmpty(syncRootPath) && Directory.Exists(syncRootPath);
 
         return new DesktopConnectorInfo(
@@ -377,16 +379,7 @@ public class DesktopConnectorService : IDesktopConnectorService
     /// </summary>
     private string ComputeProjectPath(string hubName, string projectName)
     {
-        return Path.Combine(_userProfilePath, SyncRootPathDefault, hubName, projectName);
-    }
-
-    /// <summary>
-    /// Computes the Desktop Connector sync root path.
-    /// Default path: %UserProfile%\DC\ACCDocs
-    /// </summary>
-    private string ComputeSyncRootPath()
-    {
-        return Path.Combine(_userProfilePath, SyncRootPathDefault);
+        return Path.Combine(_syncRoot, hubName, projectName);
     }
 
     /// <summary>

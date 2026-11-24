@@ -4,7 +4,6 @@ using DigitalMIDP.Application.UseCases;
 using DigitalMIDP.ViewModels;
 using DigitalMIDP.Views;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Win32;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -22,55 +21,21 @@ public partial class MainWindow : Window
 {
     private MainViewModel? _viewModel;
     private readonly Dictionary<string, DataGridColumn> _dynamicColumns = new();
-    private bool _isSessionLocked;
 
-    public MainWindow()
+    public MainWindow() : this(App.Services.GetRequiredService<MainViewModel>()) { }
+
+    internal MainWindow(MainViewModel viewModel)
     {
         InitializeComponent();
 
         // Resolve and set MainViewModel from DI container
-        _viewModel = App.Services.GetService<MainViewModel>();
+        _viewModel = viewModel;
         DataContext = _viewModel;
 
         // Add handlers to dynamically add custom attribute columns
         Loaded += MainWindow_Loaded;
 
-        // Auto-refresh is paused while nobody can see the grid - see FilesViewModel.SetAutoRefreshPaused.
-        // SystemEvents is static, so the handler is detached in OnClosed or it would keep this window alive.
-        StateChanged += (_, _) => UpdateAutoRefreshPause();
-        SystemEvents.SessionSwitch += OnSessionSwitch;
     }
-
-    protected override void OnClosed(EventArgs e)
-    {
-        SystemEvents.SessionSwitch -= OnSessionSwitch;
-        base.OnClosed(e);
-    }
-
-    private void OnSessionSwitch(object sender, SessionSwitchEventArgs e)
-    {
-        switch (e.Reason)
-        {
-            case SessionSwitchReason.SessionLock:
-            case SessionSwitchReason.ConsoleDisconnect:
-            case SessionSwitchReason.RemoteDisconnect:
-                _isSessionLocked = true;
-                break;
-            case SessionSwitchReason.SessionUnlock:
-            case SessionSwitchReason.ConsoleConnect:
-            case SessionSwitchReason.RemoteConnect:
-                _isSessionLocked = false;
-                break;
-            default:
-                return;
-        }
-
-        // SessionSwitch is raised on a SystemEvents thread; the ViewModel and its timer belong to the UI thread.
-        Dispatcher.BeginInvoke(UpdateAutoRefreshPause);
-    }
-
-    private void UpdateAutoRefreshPause() =>
-        _viewModel?.FilesViewModel.SetAutoRefreshPaused(WindowState == WindowState.Minimized || _isSessionLocked);
 
     /// <summary>
     /// Initializes dynamic DataGrid columns for custom attributes.
@@ -92,16 +57,6 @@ public partial class MainWindow : Window
 
         // Subscribe to metadata fields collection changes
         _viewModel.FilesViewModel.AvailableMetadataFields.CollectionChanged +=
-            (s, args) => Dispatcher.Invoke(() =>
-            {
-                RefreshCustomAttributeColumns();
-                RefreshColumnSelectorMenu();
-                AttachColumnFilterHeaders();
-            });
-
-        // Naming-code fields (Project, Originator, Volume/System, Level/Location, ...) rebuild the
-        // same columns/menu, independently of AvailableMetadataFields - see FilesViewModel.GridMetadataFields.
-        _viewModel.FilesViewModel.NamingCodeFields.CollectionChanged +=
             (s, args) => Dispatcher.Invoke(() =>
             {
                 RefreshCustomAttributeColumns();
@@ -630,26 +585,16 @@ public partial class MainWindow : Window
             return;
         }
 
-        // The dialog's field list is the project-wide custom attribute set (AvailableMetadataFields,
-        // already fetched once when the folder loaded, and already excluding filename-code fields).
-        // The same fields apply to every file regardless of which folder it's in - confirmed with the
-        // client that subfolder-scoped custom attributes aren't a real scenario here - so there's no
-        // need for a live per-click fetch (or a multi-file intersection) like there used to be.
-        var availableFields = filesViewModel.AvailableMetadataFields.ToList();
-
         var editViewModel = App.Services.GetRequiredService<EditCustomAttributesViewModel>();
-        editViewModel.Initialize(
-            filesViewModel.CurrentProjectId!,
-            selectedItems,
-            availableFields);
-
-        editViewModel.AttributesUpdated += updatedValuesByItemUrn =>
+        try
         {
-            foreach (var (itemUrn, values) in updatedValuesByItemUrn)
-            {
-                filesViewModel.ApplyUpdatedCustomAttributes(itemUrn, values);
-            }
-        };
+            filesViewModel.OpenAttributeEditor(editViewModel, selectedItems);
+        }
+        catch (InvalidOperationException ex)
+        {
+            MessageBox.Show(this, ex.Message, "Unable to load edit attributes", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
 
         var dialog = new EditCustomAttributesWindow(editViewModel) { Owner = this };
         dialog.ShowDialog();
@@ -751,7 +696,7 @@ public partial class MainWindow : Window
             var (message, hadProblems) = FormatBatchResult(result, total);
             filesViewModel.CompleteDeliverableCreation(message, hadProblems);
 
-            if (result.AnySucceeded)
+            if (result.AnySucceeded && filesViewModel.CurrentHubId == request.HubId && filesViewModel.CurrentProjectId == request.ProjectId)
             {
                 // Adds the created rows directly instead of reloading the project.
                 //

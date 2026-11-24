@@ -36,7 +36,7 @@
         </StackPanel>
 
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-            <ItemsControl ItemsSource="{Binding Fields}">
+            <ItemsControl ItemsSource="{Binding Fields}" IsEnabled="{Binding IsSaving, Converter={StaticResource InverseBool}}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <StackPanel Margin="0,0,0,15">

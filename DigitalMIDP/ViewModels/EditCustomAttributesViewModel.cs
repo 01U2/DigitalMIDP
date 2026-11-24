@@ -75,8 +75,7 @@ public sealed partial class EditableAttributeFieldViewModel : ObservableObject
 /// <summary>
 /// ViewModel backing the "Edit Attributes" dialog. Lets the user change one or more
 /// selected files' ACC custom attribute values and push the change to ACC/BIM 360.
-/// Attribute schema is scoped per project, so the same field set applies to every
-/// selected file regardless of how many are chosen.
+/// Bulk edits expose only compatible folder definitions; writes use each target's own ID.
 /// </summary>
 public sealed partial class EditCustomAttributesViewModel : ObservableObject
 {
@@ -86,8 +85,9 @@ public sealed partial class EditCustomAttributesViewModel : ObservableObject
     private readonly ILogger<EditCustomAttributesViewModel> _logger;
 
     private string? _projectId;
-    private IReadOnlyList<ItemDto> _items = [];
-    private bool _isMultiFile;
+    private IReadOnlyList<AttributeEditTarget> _targets = [];
+    private Func<bool> _isCurrent = () => false;
+    private bool _hasConfirmations;
 
     [ObservableProperty]
     private string? fileName;
@@ -108,7 +108,7 @@ public sealed partial class EditCustomAttributesViewModel : ObservableObject
     private string? successMessage;
 
     /// <summary>
-    /// Set to true after at least one file saved successfully so the view can close the dialog.
+    /// True only when all requested changes were confirmed.
     /// </summary>
     [ObservableProperty]
     private bool saveSucceeded;
@@ -138,42 +138,33 @@ public sealed partial class EditCustomAttributesViewModel : ObservableObject
     /// </summary>
     public void Initialize(
         string projectId,
-        IReadOnlyList<ItemDto> items,
-        IReadOnlyList<MetadataFieldDisplayDto> availableFields)
+        IReadOnlyList<AttributeEditTarget> targets,
+        Func<bool> isCurrent)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
-        ArgumentNullException.ThrowIfNull(items);
-        ArgumentNullException.ThrowIfNull(availableFields);
-        if (items.Count == 0)
+        ArgumentNullException.ThrowIfNull(targets);
+        ArgumentNullException.ThrowIfNull(isCurrent);
+        if (targets.Count == 0)
         {
-            throw new ArgumentException("At least one file must be selected.", nameof(items));
+            throw new ArgumentException("At least one file must be selected.", nameof(targets));
         }
 
         _projectId = projectId;
-        _items = items;
-        _isMultiFile = items.Count > 1;
-        IsMultiFile = _isMultiFile;
-        FileName = _isMultiFile ? $"{items.Count} files selected" : items[0].Name;
+        _targets = targets;
+        _isCurrent = isCurrent;
+        _hasConfirmations = false;
+        IsMultiFile = targets.Count > 1;
+        FileName = IsMultiFile ? $"{targets.Count} files selected" : targets[0].Item.Name;
         ErrorMessage = null;
         SuccessMessage = null;
         SaveSucceeded = false;
 
-        var currentValues = _isMultiFile
-            ? new Dictionary<string, string?>()
-            : items[0].CustomAttributes ?? new Dictionary<string, string?>();
-
-        _logger.LogInformation(
-            "EditCustomAttributesViewModel.Initialize received {Count} available fields: [{Fields}]",
-            availableFields.Count,
-            string.Join(", ", availableFields.Select(f => $"{f.Name}(id={f.AttributeId})")));
-
-        Fields = new ObservableCollection<EditableAttributeFieldViewModel>(
-            availableFields
-                .Where(f => f.AttributeId != 0)
-                .Select(f => new EditableAttributeFieldViewModel(
-                    f,
-                    currentValues.TryGetValue(f.Name, out var v) ? v : null,
-                    _isMultiFile)));
+        var first = targets[0];
+        Fields = new(first.Definitions.Where(f => f.AttributeId > 0 &&
+            (!f.Type.Equals("array", StringComparison.OrdinalIgnoreCase) || f.Options.Count > 0) &&
+            targets.All(t => t.Definitions.Any(d => d.AttributeId > 0 && d.Name == f.Name && d.Type == f.Type &&
+                d.Optional == f.Optional && d.Options.Select(o => o.Value).ToHashSet().SetEquals(f.Options.Select(o => o.Value)))))
+            .Select(f => new EditableAttributeFieldViewModel(f, first.Values.GetValueOrDefault(f.AttributeId), IsMultiFile)));
 
         _logger.LogInformation(
             "EditCustomAttributesViewModel.Initialize built {Count} editable fields: [{Fields}]",
@@ -186,13 +177,19 @@ public sealed partial class EditCustomAttributesViewModel : ObservableObject
     {
         ErrorMessage = null;
         SuccessMessage = null;
+        SaveSucceeded = false;
 
-        if (_items.Count == 0 || string.IsNullOrWhiteSpace(_projectId))
+        if (_targets.Count == 0 || string.IsNullOrWhiteSpace(_projectId))
         {
             ErrorMessage = "No file selected.";
             return;
         }
 
+        if (_hasConfirmations || !_isCurrent())
+        {
+            ErrorMessage = "Refresh and reopen the editor before saving again.";
+            return;
+        }
         var validationError = Validate();
         if (validationError is not null)
         {
@@ -200,7 +197,7 @@ public sealed partial class EditCustomAttributesViewModel : ObservableObject
             return;
         }
 
-        var changedFields = Fields.Where(f => f.HasChanged).ToList();
+        var changedFields = Fields.Where(f => f.HasChanged).ToDictionary(f => f.Name, f => f.Value);
         if (changedFields.Count == 0)
         {
             ErrorMessage = "No changes to save.";
@@ -212,12 +209,12 @@ public sealed partial class EditCustomAttributesViewModel : ObservableObject
         try
         {
             using var semaphore = new SemaphoreSlim(MaxConcurrentUpdates);
-            var tasks = _items.Select(async item =>
+            var tasks = _targets.Select(async target =>
             {
                 await semaphore.WaitAsync();
                 try
                 {
-                    return await UpdateSingleItemAsync(item, changedFields);
+                    return await UpdateSingleItemAsync(target, changedFields);
                 }
                 finally
                 {
@@ -226,33 +223,38 @@ public sealed partial class EditCustomAttributesViewModel : ObservableObject
             });
 
             var results = await Task.WhenAll(tasks);
-            var successes = results.Where(r => r.Success).ToList();
+            var saved = results.Count(r => r.Success && r.Confirmed?.Count > 0);
+            var unchanged = results.Count(r => r.Success && r.Confirmed == null);
             var failures = results.Where(r => !r.Success).ToList();
 
-            if (successes.Count > 0)
+            var payload = results.Where(r => r.Confirmed?.Count > 0).ToDictionary(r => r.Item.ItemUrn!, r => r.Confirmed!);
+            if (payload.Count > 0)
             {
-                var changedValues = changedFields.ToDictionary(f => f.Name, f => f.Value, StringComparer.OrdinalIgnoreCase);
-                var payload = successes.ToDictionary(
-                    s => s.Item.ItemUrn!,
-                    s => MergeValues(s.Item, changedValues),
-                    StringComparer.OrdinalIgnoreCase);
+                _hasConfirmations = true;
                 AttributesUpdated?.Invoke(payload);
+            }
+
+            if (!_isCurrent())
+            {
+                ErrorMessage = "The project or manifest changed during save. Changes may have reached ACC; refresh and reopen to verify.";
+                return;
             }
 
             if (failures.Count == 0)
             {
-                SuccessMessage = _isMultiFile
-                    ? $"Custom attributes updated successfully for all {successes.Count} files."
+                if (payload.Count == 0) { ErrorMessage = "No changes to save."; return; }
+                SuccessMessage = unchanged > 0 ? $"Updated {saved} files; {unchanged} already had the requested values." : IsMultiFile
+                    ? $"Custom attributes updated successfully for all {saved} files."
                     : "Custom attributes updated successfully.";
                 SaveSucceeded = true;
             }
             else
             {
                 var failureLines = failures.Select(f => $"'{f.Item.Name}': {f.ErrorMessage}");
-                ErrorMessage = successes.Count > 0
-                    ? $"Updated {successes.Count} of {results.Length} files. The following failed:{Environment.NewLine}{string.Join(Environment.NewLine, failureLines)}"
+                ErrorMessage = saved > 0
+                    ? $"Updated {saved} of {results.Length} files. The following failed:{Environment.NewLine}{string.Join(Environment.NewLine, failureLines)}"
                     : string.Join(Environment.NewLine, failureLines);
-                SaveSucceeded = successes.Count > 0;
+                SaveSucceeded = false;
             }
         }
         finally
@@ -262,8 +264,9 @@ public sealed partial class EditCustomAttributesViewModel : ObservableObject
     }
 
     private async Task<ItemUpdateResult> UpdateSingleItemAsync(
-        ItemDto item, IReadOnlyList<EditableAttributeFieldViewModel> changedFields)
+        AttributeEditTarget target, IReadOnlyDictionary<string, string?> changedFields)
     {
+        var item = target.Item;
         if (string.IsNullOrWhiteSpace(item.TipVersionUrn))
         {
             return new ItemUpdateResult(item, false, "File version could not be determined. Reload the folder and try again.");
@@ -271,17 +274,34 @@ public sealed partial class EditCustomAttributesViewModel : ObservableObject
 
         try
         {
-            var updates = changedFields
-                .Select(f => new CustomAttributeUpdateRequestDto(f.AttributeId, f.Value))
+            var updates = target.Definitions.Where(f => changedFields.ContainsKey(f.Name) &&
+                (!target.Values.TryGetValue(f.AttributeId, out var old) || old != changedFields[f.Name]))
+                .Select(f => new CustomAttributeUpdateRequestDto(f.AttributeId, changedFields[f.Name]))
                 .ToList();
-
-            await _dataManagementService.UpdateItemCustomAttributesAsync(
+            if (updates.Count == 0) return new(item, true, null);
+            if (!_isCurrent()) return new(item, false, "Manifest changed. Reopen the editor.");
+            await _dataManagementService.ValidateAttributeEditAsync(_projectId!, target, updates);
+            if (!_isCurrent()) return new(item, false, "Manifest changed. Reopen the editor.");
+            var results = await _dataManagementService.UpdateItemCustomAttributesAsync(
                 _projectId!,
                 item.TipVersionUrn!,
                 updates,
                 CancellationToken.None);
 
-            return new ItemUpdateResult(item, true, null);
+            var confirmed = new Dictionary<string, string?>();
+            var missing = new List<string>();
+            foreach (var update in updates)
+            {
+                var name = target.Definitions.Single(d => d.AttributeId == update.AttributeId).Name;
+                var matches = results.Where(r => r.AttributeId == update.AttributeId).ToArray();
+                if (matches.Length == 1 && matches[0].Value == update.Value)
+                    confirmed.Add(name, matches[0].Value);
+                else missing.Add(name);
+            }
+            var unexpected = results.Any(r => !updates.Any(u => u.AttributeId == r.AttributeId));
+            var error = missing.Count > 0 ? $"Not confirmed: {string.Join(", ", missing)}. Refresh before retrying." :
+                unexpected ? "Unexpected attribute confirmation. Refresh before retrying." : null;
+            return new(item, error == null, error, confirmed);
         }
         catch (PermissionDeniedException ex)
         {
@@ -291,7 +311,7 @@ public sealed partial class EditCustomAttributesViewModel : ObservableObject
         catch (AttributeValidationException ex)
         {
             _logger.LogWarning(ex, "Validation error updating custom attributes for {ItemName}", item.Name);
-            return new ItemUpdateResult(item, false, BuildValidationErrorMessage(ex));
+            return new ItemUpdateResult(item, false, BuildValidationErrorMessage(ex, target));
         }
         catch (Exception ex)
         {
@@ -300,27 +320,13 @@ public sealed partial class EditCustomAttributesViewModel : ObservableObject
         }
     }
 
-    private static IReadOnlyDictionary<string, string?> MergeValues(
-        ItemDto item, IReadOnlyDictionary<string, string?> changedValues)
-    {
-        var merged = new Dictionary<string, string?>(
-            item.CustomAttributes ?? new Dictionary<string, string?>(), StringComparer.OrdinalIgnoreCase);
-
-        foreach (var (name, value) in changedValues)
-        {
-            merged[name] = value;
-        }
-
-        return merged;
-    }
-
     private string? Validate()
     {
         foreach (var field in Fields)
         {
             // In multi-file mode, an untouched field is intentionally left alone on every
             // file, so it isn't sent and doesn't need to satisfy required/option constraints.
-            if (_isMultiFile && !field.Touched)
+            if (!field.HasChanged)
             {
                 continue;
             }
@@ -332,7 +338,7 @@ public sealed partial class EditCustomAttributesViewModel : ObservableObject
 
             if (field.IsDropdown
                 && !string.IsNullOrWhiteSpace(field.Value)
-                && !field.Options.Any(o => string.Equals(o.Value, field.Value, StringComparison.OrdinalIgnoreCase)))
+                && !field.Options.Any(o => string.Equals(o.Value, field.Value, StringComparison.Ordinal)))
             {
                 return $"'{field.Value}' is not a valid option for '{field.Name}'.";
             }
@@ -345,7 +351,7 @@ public sealed partial class EditCustomAttributesViewModel : ObservableObject
     /// Turns ACC's structured validation error (attribute id + reason) into a message naming the
     /// actual field the user edited, instead of showing the raw API error id/JSON.
     /// </summary>
-    private string BuildValidationErrorMessage(AttributeValidationException ex)
+    private static string BuildValidationErrorMessage(AttributeValidationException ex, AttributeEditTarget target)
     {
         if (ex.Errors.Count == 0)
         {
@@ -354,7 +360,7 @@ public sealed partial class EditCustomAttributesViewModel : ObservableObject
 
         var fieldMessages = ex.Errors.Select(error =>
         {
-            var fieldName = Fields.FirstOrDefault(f => f.AttributeId == error.AttributeId)?.Name
+            var fieldName = target.Definitions.FirstOrDefault(f => f.AttributeId == error.AttributeId)?.Name
                 ?? $"attribute {error.AttributeId}";
             var reason = error.Detail ?? ex.Message;
             return $"'{fieldName}': {reason}";
@@ -363,5 +369,6 @@ public sealed partial class EditCustomAttributesViewModel : ObservableObject
         return string.Join(Environment.NewLine, fieldMessages);
     }
 
-    private sealed record ItemUpdateResult(ItemDto Item, bool Success, string? ErrorMessage);
+    private sealed record ItemUpdateResult(ItemDto Item, bool Success, string? ErrorMessage,
+        IReadOnlyDictionary<string, string?>? Confirmed = null);
 }

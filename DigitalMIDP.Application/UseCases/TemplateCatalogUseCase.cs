@@ -1,5 +1,6 @@
 using DigitalMIDP.Application.Dtos;
 using DigitalMIDP.Application.Interfaces;
+using DigitalMIDP.Application.Manifests;
 using Microsoft.Extensions.Logging;
 
 namespace DigitalMIDP.Application.UseCases;
@@ -67,7 +68,7 @@ public sealed class TemplateCatalogUseCase : ITemplateCatalogUseCase
             projectId, templatesFolder.Id, accessToken, cancellationToken);
 
         var templates = items
-            .Where(i => i.Type == ItemType.File)
+            .Where(i => i.Type == ItemType.File && !ProjectManifest.IsReserved(i.Name))
             .Select(i => new DeliverableTemplateDto(
                 ItemId: i.Id,
                 Name: i.Name,

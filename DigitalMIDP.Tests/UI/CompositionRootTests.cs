@@ -1,4 +1,5 @@
 ﻿using DigitalMIDP.Application.Interfaces;
+using DigitalMIDP.Application.Manifests;
 using DigitalMIDP.Application.UseCases;
 using DigitalMIDP.ViewModels;
 using FluentAssertions;
@@ -46,7 +47,7 @@ public sealed class CompositionRootTests
         });
     }
 
-    private static ServiceCollection BuildServices()
+    internal static ServiceCollection BuildServices(string? syncRoot = null)
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -54,6 +55,7 @@ public sealed class CompositionRootTests
                 // The same keys AddApsServices requires of appsettings.json. Not secrets: the real
                 // ClientId is a public PKCE client id.
                 ["Autodesk:ClientId"] = "test-client-id",
+                ["DesktopConnector:SyncRootPath"] = syncRoot,
                 ["Autodesk:RedirectUri"] = "http://localhost:8080/callback",
                 ["Autodesk:Scopes"] = "data:read data:write data:create"
             })
@@ -102,6 +104,9 @@ public sealed class CompositionRootTests
         scope.ServiceProvider.GetRequiredService<IAuthenticationUseCase>().Should().NotBeNull();
         scope.ServiceProvider.GetRequiredService<ILogoutUseCase>().Should().NotBeNull();
         scope.ServiceProvider.GetRequiredService<IFileListingUseCase>().Should().NotBeNull();
+        scope.ServiceProvider.GetRequiredService<IProjectInventoryReconciler>().Should().NotBeNull();
+        scope.ServiceProvider.GetRequiredService<IManifestPublisher>().Should().NotBeNull();
+        scope.ServiceProvider.GetRequiredService<ILocalManifestReader>().Should().NotBeNull();
         scope.ServiceProvider.GetRequiredService<ICreateDeliverableUseCase>().Should().NotBeNull();
         scope.ServiceProvider.GetRequiredService<IDocumentNumberUseCase>().Should().NotBeNull();
         scope.ServiceProvider.GetRequiredService<ICdeStructureUseCase>().Should().NotBeNull();
@@ -196,18 +201,18 @@ public sealed class CompositionRootTests
         var mainViewModel = provider.GetRequiredService<MainViewModel>();
         var filesViewModel = mainViewModel.FilesViewModel;
 
-        var autoRefreshTimer = (System.Windows.Threading.DispatcherTimer)typeof(FilesViewModel)
-            .GetField("_autoRefreshTimer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+        var clipboardTimer = (System.Windows.Threading.DispatcherTimer)typeof(FilesViewModel)
+            .GetField("_clipboardStatusTimer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
             .GetValue(filesViewModel)!;
 
-        autoRefreshTimer.Start();
-        autoRefreshTimer.IsEnabled.Should().BeTrue();
+        clipboardTimer.Start();
+        clipboardTimer.IsEnabled.Should().BeTrue();
 
         provider.Dispose();
 
         // The end of the chain this exists for: container -> MainViewModel -> FilesViewModel ->
         // timers stopped. Before this, nothing in the application ever stopped them.
-        autoRefreshTimer.IsEnabled.Should().BeFalse();
+        clipboardTimer.IsEnabled.Should().BeFalse();
     }
 
     [Fact]

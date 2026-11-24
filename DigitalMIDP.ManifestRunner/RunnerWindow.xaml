@@ -1,0 +1,210 @@
+﻿<Window x:Class="DigitalMIDP.ManifestRunner.RunnerWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="DigitalMIDP Runner" Width="1180" Height="620" MinWidth="760" MinHeight="500" Closing="OnClosing"
+        Background="#F0F0F0">
+    <Window.Resources>
+        <SolidColorBrush x:Key="PrimaryBlueBrush" Color="#3498DB"/>
+        <SolidColorBrush x:Key="PrimaryBlueHoverBrush" Color="#2980B9"/>
+        <SolidColorBrush x:Key="HeaderTextBrush" Color="#2C3E50"/>
+        <SolidColorBrush x:Key="SurfaceBrush" Color="White"/>
+
+        <Style x:Key="SectionLabelStyle" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Foreground" Value="{StaticResource HeaderTextBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,8,0"/>
+        </Style>
+
+        <Style TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource PrimaryBlueBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Padding" Value="14,8"/>
+            <Setter Property="MinWidth" Value="120"/>
+            <Setter Property="Margin" Value="4"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{StaticResource PrimaryBlueHoverBrush}"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#BDC3C7"/>
+                    <Setter Property="Cursor" Value="Arrow"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType="ComboBox">
+            <Setter Property="MinWidth" Value="100"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="Margin" Value="0,0,8,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <Style TargetType="TextBox">
+            <Setter Property="MinWidth" Value="80"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="Margin" Value="0,0,8,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Height" Value="30"/>
+        </Style>
+
+        <Style x:Key="GridLabelStyle" TargetType="TextBlock" BasedOn="{StaticResource SectionLabelStyle}"/>
+
+        <Style x:Key="SignInGridButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Width" Value="120"/>
+            <Setter Property="Visibility" Value="Collapsed"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding SignedIn}" Value="False">
+                    <Setter Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="SignOutGridButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Width" Value="120"/>
+            <Setter Property="Visibility" Value="Collapsed"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding SignedIn}" Value="True">
+                    <Setter Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="GridButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="MinWidth" Value="120"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        </Style>
+
+        <Style x:Key="GridTwoColumnComboStyle" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        </Style>
+
+        <Style x:Key="SignInButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Visibility" Value="Collapsed"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding SignedIn}" Value="False">
+                    <Setter Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="SignOutButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Visibility" Value="Collapsed"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding SignedIn}" Value="True">
+                    <Setter Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel Margin="16" Grid.IsSharedSizeScope="True">
+        <Border DockPanel.Dock="Top" Background="{StaticResource SurfaceBrush}" BorderBrush="#D0DCE8" BorderThickness="1" CornerRadius="4" Padding="12" Margin="0,0,0,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <Grid Grid.Column="0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0" Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="100"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="120"/>
+                            <ColumnDefinition Width="16"/>
+                            <ColumnDefinition Width="100"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="120"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Hub" Style="{StaticResource SectionLabelStyle}"/>
+                        <ComboBox Grid.Column="1" ItemsSource="{Binding Hubs}" DisplayMemberPath="Name" SelectedItem="{Binding Hub}"/>
+                        <Button Grid.Column="2" Content="Refresh hubs" Command="{Binding LoadHubs}" Style="{StaticResource GridButtonStyle}"/>
+
+                        <TextBlock Grid.Column="4" Text="Project" Style="{StaticResource SectionLabelStyle}"/>
+                        <ComboBox Grid.Column="5" ItemsSource="{Binding Projects}" DisplayMemberPath="Name" SelectedItem="{Binding Project}"/>
+                        <Button Grid.Column="6" Content="Load projects" Command="{Binding LoadProjects}" Style="{StaticResource GridButtonStyle}"/>
+                    </Grid>
+
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="100"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="120"/>
+                            <ColumnDefinition Width="16"/>
+                            <ColumnDefinition Width="100"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Interval (minutes)" Style="{StaticResource SectionLabelStyle}"/>
+                        <TextBox Grid.Column="1" Text="{Binding IntervalMinutes, UpdateSourceTrigger=PropertyChanged}"/>
+                        <Button Grid.Column="2" Content="Enroll project" Command="{Binding Enroll}" Style="{StaticResource GridButtonStyle}"/>
+
+                        <TextBlock Grid.Column="4" Text="Enrolled projects" Style="{StaticResource SectionLabelStyle}"/>
+                        <Button Grid.Column="5" Content="Check now" Command="{Binding CheckNow}" Style="{StaticResource GridButtonStyle}"/>
+                        <Button Grid.Column="6" Content="Apply interval" Command="{Binding ChangeInterval}" Style="{StaticResource GridButtonStyle}"/>
+                        <Button Grid.Column="7" Content="Remove selected" Command="{Binding Remove}" Style="{StaticResource GridButtonStyle}"/>
+                    </Grid>
+                </Grid>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" HorizontalAlignment="Right">
+                    <Button Content="Sign in" Command="{Binding SignIn}" Style="{StaticResource SignInGridButtonStyle}"/>
+                    <Button Content="Sign out" Command="{Binding SignOut}" Style="{StaticResource SignOutGridButtonStyle}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <TextBlock DockPanel.Dock="Bottom" Text="{Binding Message}" TextWrapping="Wrap" Margin="0,10,0,0" Foreground="{StaticResource HeaderTextBrush}" />
+
+        <DataGrid ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}" AutoGenerateColumns="False" IsReadOnly="True"
+                  SelectionMode="Single" CanUserAddRows="False" GridLinesVisibility="Horizontal"
+                  HorizontalGridLinesBrush="#D6E7F5" BorderBrush="#CCDCEC" BorderThickness="1"
+                  RowBackground="White" AlternatingRowBackground="#F7FBFF" HeadersVisibility="Column">
+            <DataGrid.RowStyle>
+                <Style TargetType="DataGridRow">
+                    <Setter Property="MinHeight" Value="32"/>
+                    <Setter Property="BorderBrush" Value="#C9DFF1"/>
+                    <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                </Style>
+            </DataGrid.RowStyle>
+            <DataGrid.CellStyle>
+                <Style TargetType="DataGridCell">
+                    <Setter Property="Padding" Value="8,4"/>
+                    <Setter Property="BorderBrush" Value="#D6E7F5"/>
+                    <Setter Property="BorderThickness" Value="0,0,1,0"/>
+                    <Setter Property="VerticalContentAlignment" Value="Center"/>
+                </Style>
+            </DataGrid.CellStyle>
+            <DataGrid.ColumnHeaderStyle>
+                <Style TargetType="DataGridColumnHeader">
+                    <Setter Property="Background" Value="{StaticResource PrimaryBlueBrush}"/>
+                    <Setter Property="Foreground" Value="White"/>
+                    <Setter Property="FontWeight" Value="SemiBold"/>
+                    <Setter Property="Padding" Value="8,6"/>
+                    <Setter Property="BorderThickness" Value="0,0,1,1"/>
+                    <Setter Property="BorderBrush" Value="#7FB6E4"/>
+                </Style>
+            </DataGrid.ColumnHeaderStyle>
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Hub ID" Binding="{Binding HubId}" Width="120" />
+                <DataGridTextColumn Header="Project ID" Binding="{Binding ProjectId}" Width="150" />
+                <DataGridTextColumn Header="Interval" Binding="{Binding Interval}" Width="120" />
+                <DataGridCheckBoxColumn Header="Checking" Binding="{Binding IsChecking, Mode=OneWay}" Width="90" />
+                <DataGridTextColumn Header="Last attempt" Binding="{Binding LastAttemptUtc}" Width="170" />
+                <DataGridTextColumn Header="Next check" Binding="{Binding NextCheckUtc}" Width="170" />
+                <DataGridTextColumn Header="Last success" Binding="{Binding LastSuccess.CheckedAtUtc}" Width="170" />
+                <DataGridTextColumn Header="Published" Binding="{Binding LastSuccess.LastPublicationUtc}" Width="160" />
+                <DataGridTextColumn Header="Changed" Binding="{Binding LastSuccess.Changed}" Width="90" />
+                <DataGridTextColumn Header="HTTP requests" Binding="{Binding LastSuccess.HttpRequestCount}" Width="110" />
+                <DataGridTextColumn Header="Last error" Binding="{Binding LastError}" Width="*" />
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</Window>

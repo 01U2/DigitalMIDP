@@ -1,26 +1,44 @@
 ﻿<Project Sdk="WixToolset.Sdk/7.0.1">
-
-	<PropertyGroup>
-		<OutputName>DigitalMIDP-Setup</OutputName>
-		<InstallerPlatform>x64</InstallerPlatform>
-		<AcceptEula>wix7</AcceptEula>
-		<!-- Per-user install: harvested files in the user profile use file key paths, not HKCU. -->
-		<SuppressIces>ICE38;ICE64;ICE91</SuppressIces>
-		<!-- Release builds pass -p:Version=x.y.z (from the git tag); local builds fall back to this. -->
-		<Version Condition="'$(Version)' == ''">0.1.0</Version>
-		<DefineConstants>$(DefineConstants);ProductVersion=$(Version)</DefineConstants>
-	</PropertyGroup>
-
-	<ItemGroup>
-		<None Include="Data\UserAgreement.rtf" />
-
-		<!-- Builds the WPF app first; its build output folder is exposed as $(var.DigitalMIDP.TargetDir). -->
-		<ProjectReference Include="..\DigitalMIDP\DigitalMIDP.csproj" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<PackageReference Include="WixToolset.UI.wixext" Version="7.0.1" />
-		<PackageReference Include="WixToolset.Netfx.wixext" Version="7.0.1" />
-	</ItemGroup>
-
+  <PropertyGroup>
+    <OutputName>DigitalMIDP-Setup</OutputName>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <AcceptEula>wix7</AcceptEula>
+    <!-- Per-user install: harvested files in the user profile use file key paths, not HKCU. -->
+    <SuppressIces>ICE38;ICE64;ICE91</SuppressIces>
+    <!-- Release builds pass -p:Version=x.y.z (from the git tag); local builds fall back to this. -->
+    <Version Condition="'$(Version)' == ''">0.1.0</Version>
+    <StageRoot>$(MSBuildProjectDirectory)\obj\$(InstallerPlatform)\$(Configuration)\publish</StageRoot>
+    <DefineConstants>$(DefineConstants);ProductVersion=$(Version);ClientPublish=$(StageRoot)\Client;RunnerPublish=$(StageRoot)\Runner</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="Data\UserAgreement.rtf" />
+    <None Include="README.md" />
+    <None Include="Test-Package.ps1" />
+    <ProjectReference Include="..\DigitalMIDP\DigitalMIDP.csproj" Stage="Client" />
+    <ProjectReference Include="..\DigitalMIDP.ManifestRunner\DigitalMIDP.ManifestRunner.csproj" Stage="Runner" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="WixToolset.UI.wixext" Version="7.0.1" />
+    <PackageReference Include="WixToolset.Netfx.wixext" Version="7.0.1" />
+  </ItemGroup>
+  <Target Name="StageInstallerPayload" BeforeTargets="CoreCompile">
+    <RemoveDir Directories="$(StageRoot)" />
+    <ItemGroup>
+      <_Payload Include="@(ProjectReference)" Condition="'%(ProjectReference.Stage)' != ''" />
+    </ItemGroup>
+    <!-- VS schedules portable project builds. Each RID publish must restore and build its
+         own references without inheriting the solution's globals or writing to its obj tree. -->
+    <Exec Command="dotnet publish &quot;%(_Payload.FullPath)&quot; -c &quot;$(Configuration)&quot; -r win-x64 --no-self-contained -p:Platform=AnyCPU -p:Version=&quot;$(Version)&quot; --artifacts-path &quot;$(StageRoot)\..\artifacts&quot; -o &quot;$(StageRoot)\%(_Payload.Stage)&quot;" />
+    <ItemGroup>
+      <Content Include="$(StageRoot)\**\*" Exclude="$(StageRoot)\**\*.pdb" />
+    </ItemGroup>
+    <!-- A removed file must invalidate the cached MSI too. -->
+    <WriteLinesToFile File="$(IntermediateOutputPath)payload-list.txt" Lines="@(Content)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <Content Include="$(IntermediateOutputPath)payload-list.txt" />
+    </ItemGroup>
+  </Target>
+  <Target Name="VerifyInstallerPayload" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">
+    <Exec Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\Test-Package.ps1&quot; -Msi &quot;$(TargetPath)&quot; -StageRoot &quot;$(StageRoot)&quot;" />
+  </Target>
 </Project>
