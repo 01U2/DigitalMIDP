@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Threading;
 using DigitalMIDP.Infrastructure;
 using DigitalMIDP.ManifestRunner.ViewModels;
@@ -21,7 +21,7 @@ public partial class App : System.Windows.Application
             instance = new Mutex(false, @"Local\DigitalMIDP.ManifestRunner", out var first);
             if (!first)
             {
-                MessageBox.Show("Manifest Runner is already open in this Windows session.", "DigitalMIDP Manifest Runner");
+                MessageBox.Show("Runner is already open in this Windows session.", "DigitalMIDP Runner");
                 Shutdown();
                 return;
             }
@@ -48,7 +48,7 @@ public partial class App : System.Windows.Application
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Cannot start Manifest Runner: {ex.Message}", "Startup error");
+            MessageBox.Show($"Cannot start Runner: {ex.Message}", "Startup error");
             Shutdown(1);
         }
     }
